@@ -1,0 +1,229 @@
+================================================================================
+                   GitHub仓库目录下载器 - 使用说明
+================================================================================
+
+【功能介绍】
+本工具用于下载GitHub仓库中的指定目录，支持两种下载方式、加速服务和代理选项。
+支持Unity Package Manager风格的Git URL格式解析。
+支持自动获取分支、标签和Commits列表。
+
+================================================================================
+【GUI模式】
+================================================================================
+直接运行程序即可启动图形界面。
+
+操作步骤：
+1. 输入GitHub地址（支持多种格式）
+2. 点击"解析URL"按钮解析仓库信息,如果是unity packagermanager风格，则自动选择下载模式为 LibGit2Sharp,否则自动选择下载模式为 Octokit
+3. 系统自动获取分支、标签列表
+4. 选择分支后会自动获取Commits列表
+5. 查看解析结果，选择是否仅下载子目录
+6. 选择本地保存路径
+7. 选择下载方式（默认Octokit）
+8. 根据需要选择加速服务和代理模式
+9. 点击"开始下载"
+
+--------------------------------------------------------------------------------
+【URL格式支持】
+--------------------------------------------------------------------------------
+支持多种URL格式：
+
+1. Unity Package Manager风格：
+   https://github.com/user/repo.git
+   https://github.com/user/repo.git#v1.0.0              (标签)
+   https://github.com/user/repo.git#main                (分支)
+   https://github.com/user/repo.git#abc123              (提交哈希)
+   https://github.com/user/repo.git?path=Assets/Plugins (子目录)
+   https://github.com/user/repo.git#v1.0.0?path=Assets  (完整格式)
+
+2. GitHub Web URL：
+   https://github.com/user/repo
+   https://github.com/user/repo/tree/main/Assets/Folder
+
+--------------------------------------------------------------------------------
+【Commits列表】
+--------------------------------------------------------------------------------
+- 选择分支后会自动获取该分支最近20个Commits
+- 格式：短SHA - 提交信息
+- 选择Commit后将使用该Commit进行下载
+
+--------------------------------------------------------------------------------
+【子目录下载选项】
+--------------------------------------------------------------------------------
+- 勾选"仅下载子目录"：只下载解析出的子目录内容，自动选择下载方式：Octokit。
+- 取消勾选：克隆整个仓库（自动选择下载方式：LibGit2Sharp）
+
+--------------------------------------------------------------------------------
+【下载方式说明】
+--------------------------------------------------------------------------------
+1. Octokit（推荐）
+   - 使用GitHub官方Octokit库
+   - 功能完整，稳定性好
+   - 支持GH-Proxy加速
+   - 适合下载单个目录
+
+2. LibGit2Sharp（完整克隆）
+   - 使用libgit原生库
+   - 会克隆整个仓库
+   - 不支持单独下载子目录，需要下载子目录则如unity packagermanager下载之逻辑一样，先clone整个仓库，再删除不需的文件
+
+
+--------------------------------------------------------------------------------
+【加速服务说明（GH-Proxy）】
+--------------------------------------------------------------------------------
+GH-Proxy是GitHub文件下载加速服务，来自 https://gh-proxy.com/
+
+使用步骤：
+1. 选择加速模式：不使用加速 / GH-Proxy加速
+2. 选择加速节点（启用加速时）
+3. 查看或修改加速后URL
+
+节点选择：
+- cloudflare (主站) - 默认节点
+- cloudflare-v6 (IPv6) - 支持IPv6
+- hongkong (香港) - 国内推荐
+- fastly (Fastly CDN)
+- edgeone (全球加速)
+
+加速后URL：
+- 启用加速后，系统会自动生成加速后的完整URL
+- 该URL可手动修改，支持使用自定义加速服务
+- 示例：https://hk.gh-proxy.org/https://github.com/user/repo
+
+注意：GH-Proxy是加速服务，不是代理！它通过URL重定向实现加速。
+
+--------------------------------------------------------------------------------
+【代理设置说明（传统代理）】
+--------------------------------------------------------------------------------
+传统代理用于网络访问，与加速服务独立。
+
+选项：
+1. 不使用代理
+   - 直接连接GitHub
+   - 配合加速服务使用效果更好
+
+2. 系统代理
+   - 自动检测系统代理设置
+   - 检测到系统代理时可一键复制到自定义代理
+
+3. 自定义代理
+   - 输入自定义代理地址
+   - 格式：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080
+
+--------------------------------------------------------------------------------
+【认证说明】
+--------------------------------------------------------------------------------
+公开项目无需认证即可下载。如需访问私有仓库或提高API速率限制：
+
+1. Token认证（推荐）
+   - 使用GitHub Personal Access Token
+   - 用户名自动设为 x-token-auth
+   
+2. 账号密码认证
+   - 使用GitHub用户名和密码
+   - 注意：GitHub已不支持密码认证，建议使用Token
+
+获取Token：GitHub Settings -> Developer settings -> Personal access tokens
+
+================================================================================
+【命令行模式】
+================================================================================
+用法：
+  RS.GitSubDirectoryDownloader --url <GitHub URL> [选项]
+
+必需参数：
+  --url, -u <URL>        GitHub目录地址
+                         例如: https://github.com/user/repo/tree/main/src
+
+可选参数：
+  --output, -o <路径>    本地保存路径 (默认: 当前目录)
+  --method, -m <方式>    下载方式 (默认: octokit)
+                         octokit  - Octokit官方库 (推荐)
+                         libgit  - LibGit2Sharp (完整克隆)
+  --acceleration, -a <加速> 加速服务设置 (默认: none)
+                         none           - 不使用加速
+                         ghproxy        - GH-Proxy加速(默认节点)
+                         ghproxy:节点   - GH-Proxy指定节点
+                                          cloudflare, hongkong, fastly, edgeone
+  --proxy, -p <代理>     传统代理设置 (默认: none)
+                         none          - 不使用代理
+                         system        - 使用系统代理
+                         custom:地址   - 自定义代理地址
+                                        例如: http://127.0.0.1:7890
+  --branch, -b <分支>    分支名称 (默认: 自动检测)
+  --subdir, -s <目录>    子目录路径 (可选，覆盖URL中的路径)
+  --extensions, -e <后缀> 文件后缀过滤，逗号分隔
+                         例如: .cs,.json,.txt
+  --token, -t <token>    GitHub Token (可选，用于私有仓库或提高速率限制)
+  --help, -h             显示帮助信息
+
+注意:
+  --acceleration 是加速服务(GH-Proxy)，通过URL重定向加速GitHub下载
+  --proxy 是传统网络代理(HTTP/SOCKS5)，用于网络代理访问
+
+================================================================================
+【命令行示例】
+================================================================================
+# 基本用法
+RS.GitSubDirectoryDownloader --url https://github.com/octokit/octokit.net/tree/main/Octokit
+
+# 指定输出目录
+RS.GitSubDirectoryDownloader -u https://github.com/user/repo -o ./download
+
+# 使用GH-Proxy香港节点加速
+RS.GitSubDirectoryDownloader -u https://github.com/user/repo -a ghproxy:hongkong
+
+# 使用传统代理访问
+RS.GitSubDirectoryDownloader -u https://github.com/user/repo -p custom:http://127.0.0.1:7890
+
+# 同时使用加速服务和代理
+RS.GitSubDirectoryDownloader -u https://github.com/user/repo -a ghproxy -p system
+
+# 指定子目录
+RS.GitSubDirectoryDownloader -u https://github.com/user/repo -s src/components
+
+# 过滤特定文件类型
+RS.GitSubDirectoryDownloader -u https://github.com/user/repo -e .cs,.json
+
+# 使用Token
+RS.GitSubDirectoryDownloader -u https://github.com/user/repo -t ghp_xxxxx
+
+# 完整参数示例
+RS.GitSubDirectoryDownloader -u https://github.com/user/repo/tree/main/src -o ./output -a ghproxy:hongkong -e .cs -t ghp_xxxxx
+
+================================================================================
+【日志文件】
+================================================================================
+所有下载日志会同时保存到 download.log 文件中，便于查看历史记录。
+
+日志文件位置：程序所在目录/download.log
+
+================================================================================
+【常见问题】
+================================================================================
+Q: 下载失败提示403错误？
+A: 未登录情况下GitHub API有速率限制，建议：
+   1. 使用Token认证
+   2. 使用GH-Proxy加速
+   3. 等待一段时间后重试
+
+Q: LibGit2Sharp提示SSL证书错误？
+A: 程序已自动配置跳过SSL验证，如仍出错请检查网络环境。
+
+Q: 下载很慢怎么办？
+A: 建议使用GH-Proxy加速，选择合适的节点（hongkong节点通常较快）。
+
+Q: 如何下载私有仓库？
+A: 需要使用Token认证，Token需要有仓库的读取权限。
+
+Q: 加速服务和代理有什么区别？
+A: - 加速服务(GH-Proxy)：通过URL重定向实现GitHub文件下载加速
+   - 代理：传统网络代理，用于网络访问
+   两者可以同时使用，互不影响。
+
+================================================================================
+【技术支持】
+================================================================================
+项目地址：https://github.com/rs-unity3d/RS.GitSubDirectoryDownloader
+
+================================================================================

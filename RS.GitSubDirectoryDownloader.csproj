@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows7.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PlatformTarget>x86</PlatformTarget>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="test_cmd_download\**" />
+    <Compile Remove="test_download\**" />
+    <Compile Remove="test_new_download\**" />
+    <EmbeddedResource Remove="test_cmd_download\**" />
+    <EmbeddedResource Remove="test_download\**" />
+    <EmbeddedResource Remove="test_new_download\**" />
+    <None Remove="test_cmd_download\**" />
+    <None Remove="test_download\**" />
+    <None Remove="test_new_download\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LibGit2Sharp" Version="0.31.0" />
+    <PackageReference Include="Octokit" Version="13.0.1" />
+  </ItemGroup>
+
+</Project>
