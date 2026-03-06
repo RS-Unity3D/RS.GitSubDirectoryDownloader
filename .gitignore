@@ -416,3 +416,7 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+/test_aot
+/test_aot_download
+/test_cmd_download
+/test_download
