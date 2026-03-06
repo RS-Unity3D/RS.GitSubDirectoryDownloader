@@ -1,11 +1,15 @@
 {
-  "LastGithubUrl": "",
-  "LastLocalPath": "",
+  "LastGithubUrl": null,
+  "LastLocalPath": null,
   "ProxyMode": 0,
-  "ProxyAddress": "",
-  "GhProxyNode": "cloudflare",
+  "ProxyAddress": null,
+  "GhProxyNode": null,
+  "AccelerationMode": 0,
   "AuthMode": 0,
-  "LastUsername": "",
   "DownloadMethod": 0,
-  "FileExtensions": ""
+  "FileExtensions": null,
+  "ExtensionFilterMode": 0,
+  "GitHubUsername": null,
+  "EncryptedGitHubPassword": null,
+  "EncryptedGitToken": null
 }
