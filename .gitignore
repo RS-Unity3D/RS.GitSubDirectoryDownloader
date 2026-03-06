@@ -420,3 +420,6 @@ FodyWeavers.xsd
 /test_aot_download
 /test_cmd_download
 /test_download
+test_download_all.bat
+test_download.bat
+test_download_with_token.bat
