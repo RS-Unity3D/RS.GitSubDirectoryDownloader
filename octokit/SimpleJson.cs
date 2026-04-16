@@ -1,4 +1,5 @@
-//-----------------------------------------------------------------------
+﻿//-----------------------------------------------------------------------
+// <copyright file="SimpleJson.cs" company="The Outercurve Foundation">
 //    Copyright (c) 2011, The Outercurve Foundation.
 //
 //    Licensed under the MIT License (the "License");
@@ -15,14 +16,17 @@
 // <author>Nathan Totten (ntotten.com), Jim Zimmerman (jimzimmerman.com) and Prabir Shrestha (prabir.me)</author>
 // <website>https://github.com/facebook-csharp-sdk/simple-json</website>
 //-----------------------------------------------------------------------
-
+//sgd:2026.2.20 support aot compiler
+//sgd: 2025.12.15 support unity 3d
+//sgd: 2025.11.10 support property To lower case
+//sgd: 2025.10.1 support string key dictionary
 // VERSION: 0.38.0
 
-// NOTE: uncomment the following line to make SimpleJson class internal.
+//NOTE: uncomment the following line to make SimpleJson class internal.
 //#define SIMPLE_JSON_INTERNAL
 
 // NOTE: uncomment the following line to make JsonArray and JsonObject class internal.
-//#define SIMPLE_JSON_OBJARRAYINTERNAL
+#define SIMPLE_JSON_OBJARRAYINTERNAL
 
 // NOTE: uncomment the following line to enable dynamic support.
 //#define SIMPLE_JSON_DYNAMIC
@@ -31,55 +35,193 @@
 //#define SIMPLE_JSON_DATACONTRACT
 
 // NOTE: uncomment the following line to enable IReadOnlyCollection<T> and IReadOnlyList<T> support.
-//#define SIMPLE_JSON_READONLY_COLLECTIONS
+#define SIMPLE_JSON_READONLY_COLLECTIONS
 
 // NOTE: uncomment the following line to disable linq expressions/compiled lambda (better performance) instead of method.invoke().
 // define if you are using .net framework <= 3.0 or < WP7.5
-//#define SIMPLE_JSON_NO_LINQ_EXPRESSION
+#define SIMPLE_JSON_NO_LINQ_EXPRESSION
 
 // NOTE: uncomment the following line if you are compiling under Window Metro style application/library.
 // usually already defined in properties
 //#define NETFX_CORE;
 
-// If you are targetting WinStore, WP8 and NET4.5+ PCL make sure to #define SIMPLE_JSON_TYPEINFO;
+//NOTE: support AOT compiler, but will disable dynamic and DataContract support, and use method.invoke() instead of compiled lambda, which is slower.
+//#define AOT
 
+//NOTE:If you are targetting WinStore, WP8 and NET4.5+ PCL make sure to #define SIMPLE_JSON_TYPEINFO;
+//#define SIMPLE_JSON_TYPEINFO;
 // original json parsing code from http://techblog.procurios.nl/k/618/news/view/14605/14863/How-do-I-write-my-own-parser-for-JSON.html
+
+//add
+//NOTE:Ignore the case of attributes/fields
+#define SIMPLE_JSON_PropertyToLowerCase
+
+//NOTE:Private fields marked with JsonInclude are serialized when onlyPublic=false
+//Private properties marked with JsonInclude are serialized when onlyPublic=false
+//By default (onlyPublic=true), private members are not included
+#define SIMPLE_JSON_OnlyPublicProperty
+//NOTE:Single-threaded mode, such as WebGL, does not consider multi-threading.
+//#define SINGLE_THREADED
+
+#if NET35 || NET40
+#undef SIMPLE_JSON_READONLY_COLLECTIONS
+#endif
 
 #if NETFX_CORE
 #define SIMPLE_JSON_TYPEINFO
 #endif
-
+#if UNITY_4 || UNITY_5 || UNITY_5_3_OR_NEWER || UNITY_2017_1_OR_NEWER
+#define SIMPLE_JSON_UNITY
+//unity webgl does not support multi-threading
+#if UNITY_WEBGL
+#define SINGLE_THREADED
+#endif
+//unity aot compiler
+#if ENABLE_IL2CPP
+#define AOT
+#endif
+#endif
+#if SIMPLE_JSON_UNITY
+using UnityEngine;
+#endif
 using System;
 using System.CodeDom.Compiler;
 using System.Collections;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
+//#if !SIMPLE_JSON_NO_LINQ_EXPRESSION
+//using System.Linq.Expressions;
+//#endif
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+//#if SIMPLE_JSON_DYNAMIC
+//using System.Dynamic;
+//#endif
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text;
-using Octokit.Reflection;
-#if !SIMPLE_JSON_NO_LINQ_EXPRESSION
-using System.Linq.Expressions;
-#endif
-#if SIMPLE_JSON_DYNAMIC
-using System.Dynamic;
-#endif
+using System.Runtime.CompilerServices;
+using System.Runtime.Serialization.Formatters;
+//
 
 // ReSharper disable LoopCanBeConvertedToQuery
 // ReSharper disable RedundantExplicitArrayCreation
 // ReSharper disable SuggestUseVarKeywordEvident
-namespace Octokit
+namespace RS.SimpleJsonAOT//GitHub.Unity.Json
 {
+    static class Constants
+    {
+        public const string Iso8601Format = @"yyyy-MM-dd\THH\:mm\:ss.fffzzz";
+        public const string Iso8601FormatZ = @"yyyy-MM-dd\THH\:mm\:ss\Z";
+        public static readonly string[] Iso8601Formats = {
+            Iso8601Format,
+            Iso8601FormatZ,
+            @"yyyy-MM-dd\THH\:mm\:ss.fffffffzzz",
+            @"yyyy-MM-dd\THH\:mm\:ss.ffffffzzz",
+            @"yyyy-MM-dd\THH\:mm\:ss.fffffzzz",
+            @"yyyy-MM-dd\THH\:mm\:ss.ffffzzz",
+            @"yyyy-MM-dd\THH\:mm\:ss.ffzzz",
+            @"yyyy-MM-dd\THH\:mm\:ss.fzzz",
+            @"yyyy-MM-dd\THH\:mm\:sszzz",
+            @"yyyy-MM-dd\THH\:mm\:ss.fffffff\Z",
+            @"yyyy-MM-dd\THH\:mm\:ss.ffffff\Z",
+            @"yyyy-MM-dd\THH\:mm\:ss.fffff\Z",
+            @"yyyy-MM-dd\THH\:mm\:ss.ffff\Z",
+            @"yyyy-MM-dd\THH\:mm\:ss.fff\Z",
+            @"yyyy-MM-dd\THH\:mm\:ss.ff\Z",
+            @"yyyy-MM-dd\THH\:mm\:ss.f\Z",
+        };
+    }
+    [Serializable]
+    internal class InstanceNotInitializedException : InvalidOperationException
+    {
+        public InstanceNotInitializedException(object the,string property) :
+            base(String.Format(CultureInfo.InvariantCulture,"{0} is not correctly initialized, {1} is null",the?.GetType().Name,property))
+        { }
+
+        protected InstanceNotInitializedException(SerializationInfo info,StreamingContext context) : base(info,context) { }
+    }
+    internal static class Guard
+    {
+        public static void NotNull(object the,object value,string propertyName)
+        {
+            if (value != null) return;
+            throw new InstanceNotInitializedException(the,propertyName);
+        }
+        public static void ArgumentNotNull(object value,string name)
+        {
+            if (value != null) return;
+            string message = String.Format(CultureInfo.InvariantCulture,"Failed Null Check on '{0}'",name);
+            throw new ArgumentNullException(name,message);
+        }
+
+        public static void ArgumentNotNullOrEmpty<T>(IList<T> value,string name)
+        {
+            if (value == null)
+            {
+                string message = String.Format(CultureInfo.InvariantCulture,"Failed Null Check on '{0}'",name);
+                throw new ArgumentNullException(name,message);
+            }
+
+            if (value.Count == 0)
+            {
+                string message = String.Format(CultureInfo.InvariantCulture,"Failed Empty Check on '{0}'",name);
+                throw new ArgumentNullException(name,message);
+            }
+        }
+
+        public static void ArgumentNonNegative(int value,string name)
+        {
+            if (value > -1) return;
+
+            var message = String.Format(CultureInfo.InvariantCulture,"The value for '{0}' must be non-negative",name);
+            throw new ArgumentException(message,name);
+        }
+
+        /// <summary>
+        ///   Checks a string argument to ensure it isn't null or empty.
+        /// </summary>
+        /// <param name = "value">The argument value to check.</param>
+        /// <param name = "name">The name of the argument.</param>
+        public static void ArgumentNotNullOrWhiteSpace(string value,string name)
+        {
+            if (value != null && value.Trim().Length > 0)
+                return;
+            string message = String.Format(CultureInfo.InvariantCulture,"The value for '{0}' must not be empty",name);
+            throw new ArgumentException(message,name);
+        }
+
+        public static void ArgumentInRange(int value,int minValue,string name)
+        {
+            if (value >= minValue) return;
+            string message = String.Format(CultureInfo.InvariantCulture,
+                "The value '{0}' for '{1}' must be greater than or equal to '{2}'",
+                value,
+                name,
+                minValue);
+            throw new ArgumentOutOfRangeException(name,message);
+        }
+
+        public static void ArgumentInRange(int value,int minValue,int maxValue,string name)
+        {
+            if (value >= minValue && value <= maxValue) return;
+            string message = String.Format(CultureInfo.InvariantCulture,
+                "The value '{0}' for '{1}' must be greater than or equal to '{2}' and less than or equal to '{3}'",
+                value,
+                name,
+                minValue,
+                maxValue);
+            throw new ArgumentOutOfRangeException(name,message);
+        }
+
+        public static bool InUnitTestRunner { get; set; }
+    }
     /// <summary>
     /// Represents the json array.
     /// </summary>
-    [GeneratedCode("simple-json", "1.0.0")]
+    [GeneratedCode("simple-json","1.0.0")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [SuppressMessage("Microsoft.Naming", "CA1710:IdentifiersShouldHaveCorrectSuffix")]
+    [SuppressMessage("Microsoft.Naming","CA1710:IdentifiersShouldHaveCorrectSuffix")]
 #if SIMPLE_JSON_OBJARRAYINTERNAL
     internal
 #else
@@ -111,9 +253,9 @@ namespace Octokit
     /// <summary>
     /// Represents the json object.
     /// </summary>
-    [GeneratedCode("simple-json", "1.0.0")]
+    [GeneratedCode("simple-json","1.0.0")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [SuppressMessage("Microsoft.Naming", "CA1710:IdentifiersShouldHaveCorrectSuffix")]
+    [SuppressMessage("Microsoft.Naming","CA1710:IdentifiersShouldHaveCorrectSuffix")]
 #if SIMPLE_JSON_OBJARRAYINTERNAL
     internal
 #else
@@ -123,19 +265,19 @@ namespace Octokit
 #if SIMPLE_JSON_DYNAMIC
  DynamicObject,
 #endif
- IDictionary<string, object>
+ IDictionary<string,object>
     {
         /// <summary>
         /// The internal member dictionary.
         /// </summary>
-        private readonly Dictionary<string, object> _members;
+        private readonly Dictionary<string,object> _members;
 
         /// <summary>
         /// Initializes a new instance of <see cref="JsonObject"/>.
         /// </summary>
         public JsonObject()
         {
-            _members = new Dictionary<string, object>();
+            _members = new Dictionary<string,object>();
         }
 
         /// <summary>
@@ -144,7 +286,7 @@ namespace Octokit
         /// <param name="comparer">The <see cref="T:System.Collections.Generic.IEqualityComparer`1"/> implementation to use when comparing keys, or null to use the default <see cref="T:System.Collections.Generic.EqualityComparer`1"/> for the type of the key.</param>
         public JsonObject(IEqualityComparer<string> comparer)
         {
-            _members = new Dictionary<string, object>(comparer);
+            _members = new Dictionary<string,object>(comparer);
         }
 
         /// <summary>
@@ -153,17 +295,17 @@ namespace Octokit
         /// <value></value>
         public object this[int index]
         {
-            get { return GetAtIndex(_members, index); }
+            get { return GetAtIndex(_members,index); }
         }
 
-        internal static object GetAtIndex(IDictionary<string, object> obj, int index)
+        internal static object GetAtIndex(IDictionary<string,object> obj,int index)
         {
             if (obj == null)
                 throw new ArgumentNullException("obj");
             if (index >= obj.Count)
                 throw new ArgumentOutOfRangeException("index");
             int i = 0;
-            foreach (KeyValuePair<string, object> o in obj)
+            foreach (KeyValuePair<string,object> o in obj)
                 if (i++ == index) return o.Value;
             return null;
         }
@@ -173,9 +315,9 @@ namespace Octokit
         /// </summary>
         /// <param name="key">The key.</param>
         /// <param name="value">The value.</param>
-        public void Add(string key, object value)
+        public void Add(string key,object value)
         {
-            _members.Add(key, value);
+            _members.Add(key,value);
         }
 
         /// <summary>
@@ -215,9 +357,9 @@ namespace Octokit
         /// <param name="key">The key.</param>
         /// <param name="value">The value.</param>
         /// <returns></returns>
-        public bool TryGetValue(string key, out object value)
+        public bool TryGetValue(string key,out object value)
         {
-            return _members.TryGetValue(key, out value);
+            return _members.TryGetValue(key,out value);
         }
 
         /// <summary>
@@ -243,9 +385,9 @@ namespace Octokit
         /// Adds the specified item.
         /// </summary>
         /// <param name="item">The item.</param>
-        public void Add(KeyValuePair<string, object> item)
+        public void Add(KeyValuePair<string,object> item)
         {
-            _members.Add(item.Key, item.Value);
+            _members.Add(item.Key,item.Value);
         }
 
         /// <summary>
@@ -261,9 +403,9 @@ namespace Octokit
         /// </summary>
         /// <param name="item">The item.</param>
         /// <returns>
-        /// 	<c>true</c> if [contains] [the specified item]; otherwise, <c>false</c>.
+        ///     <c>true</c> if [contains] [the specified item]; otherwise, <c>false</c>.
         /// </returns>
-        public bool Contains(KeyValuePair<string, object> item)
+        public bool Contains(KeyValuePair<string,object> item)
         {
             return _members.ContainsKey(item.Key) && _members[item.Key] == item.Value;
         }
@@ -273,11 +415,11 @@ namespace Octokit
         /// </summary>
         /// <param name="array">The array.</param>
         /// <param name="arrayIndex">Index of the array.</param>
-        public void CopyTo(KeyValuePair<string, object>[] array, int arrayIndex)
+        public void CopyTo(KeyValuePair<string,object>[] array,int arrayIndex)
         {
             if (array == null) throw new ArgumentNullException("array");
             int num = Count;
-            foreach (KeyValuePair<string, object> kvp in this)
+            foreach (KeyValuePair<string,object> kvp in this)
             {
                 array[arrayIndex++] = kvp;
                 if (--num <= 0)
@@ -298,7 +440,7 @@ namespace Octokit
         /// Gets a value indicating whether this instance is read only.
         /// </summary>
         /// <value>
-        /// 	<c>true</c> if this instance is read only; otherwise, <c>false</c>.
+        ///     <c>true</c> if this instance is read only; otherwise, <c>false</c>.
         /// </value>
         public bool IsReadOnly
         {
@@ -310,7 +452,7 @@ namespace Octokit
         /// </summary>
         /// <param name="item">The item.</param>
         /// <returns></returns>
-        public bool Remove(KeyValuePair<string, object> item)
+        public bool Remove(KeyValuePair<string,object> item)
         {
             return _members.Remove(item.Key);
         }
@@ -319,7 +461,7 @@ namespace Octokit
         /// Gets the enumerator.
         /// </summary>
         /// <returns></returns>
-        public IEnumerator<KeyValuePair<string, object>> GetEnumerator()
+        public IEnumerator<KeyValuePair<string,object>> GetEnumerator()
         {
             return _members.GetEnumerator();
         }
@@ -353,7 +495,7 @@ namespace Octokit
         /// <param name="binder">Provides information about the conversion operation. The binder.Type property provides the type to which the object must be converted. For example, for the statement (String)sampleObject in C# (CType(sampleObject, Type) in Visual Basic), where sampleObject is an instance of the class derived from the <see cref="T:System.Dynamic.DynamicObject"/> class, binder.Type returns the <see cref="T:System.String"/> type. The binder.Explicit property provides information about the kind of conversion that occurs. It returns true for explicit conversion and false for implicit conversion.</param>
         /// <param name="result">The result of the type conversion operation.</param>
         /// <returns>
-        /// Always returns true.
+        /// Alwasy returns true.
         /// </returns>
         public override bool TryConvert(ConvertBinder binder, out object result)
         {
@@ -380,7 +522,7 @@ namespace Octokit
         /// </summary>
         /// <param name="binder">Provides information about the deletion.</param>
         /// <returns>
-        /// Always returns true.
+        /// Alwasy returns true.
         /// </returns>
         public override bool TryDeleteMember(DeleteMemberBinder binder)
         {
@@ -398,7 +540,7 @@ namespace Octokit
         /// <param name="indexes">The indexes that are used in the operation. For example, for the sampleObject[3] operation in C# (sampleObject(3) in Visual Basic), where sampleObject is derived from the DynamicObject class, <paramref name="indexes"/> is equal to 3.</param>
         /// <param name="result">The result of the index operation.</param>
         /// <returns>
-        /// Always returns true.
+        /// Alwasy returns true.
         /// </returns>
         public override bool TryGetIndex(GetIndexBinder binder, object[] indexes, out object result)
         {
@@ -418,7 +560,7 @@ namespace Octokit
         /// <param name="binder">Provides information about the object that called the dynamic operation. The binder.Name property provides the name of the member on which the dynamic operation is performed. For example, for the Console.WriteLine(sampleObject.SampleProperty) statement, where sampleObject is an instance of the class derived from the <see cref="T:System.Dynamic.DynamicObject"/> class, binder.Name returns "SampleProperty". The binder.IgnoreCase property specifies whether the member name is case-sensitive.</param>
         /// <param name="result">The result of the get operation. For example, if the method is called for a property, you can assign the property value to <paramref name="result"/>.</param>
         /// <returns>
-        /// Always returns true.
+        /// Alwasy returns true.
         /// </returns>
         public override bool TryGetMember(GetMemberBinder binder, out object result)
         {
@@ -483,18 +625,15 @@ namespace Octokit
         }
 #endif
     }
-}
 
-namespace Octokit
-{
     /// <summary>
     /// This class encodes and decodes JSON strings.
     /// Spec. details, see http://www.json.org/
     ///
-    /// JSON uses Arrays and Objects. These correspond here to the data types JsonArray(IList&lt;object>) and JsonObject(IDictionary&lt;string,object>).
+    /// JSON uses Arrays and Objects. These correspond here to the datatypes JsonArray(IList&lt;object>) and JsonObject(IDictionary&lt;string,object>).
     /// All numbers are parsed to doubles.
     /// </summary>
-    [GeneratedCode("simple-json", "1.0.0")]
+    [GeneratedCode("simple-json","1.0.0")]
 #if SIMPLE_JSON_INTERNAL
     internal
 #else
@@ -517,12 +656,8 @@ namespace Octokit
         private const int BUILDER_CAPACITY = 2000;
 
         private static readonly char[] EscapeTable;
-        private static readonly char[] EscapeCharacters = new char[] { '"', '\\',
-            '\x00', '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07',
-            '\x08', '\x09', '\x0a', '\x0b', '\x0c', '\x0d', '\x0e', '\x0f',
-            '\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17',
-            '\x18', '\x19', '\x1a', '\x1b', '\x1c', '\x1d', '\x1e', '\x1f'
-        };
+        private static readonly char[] EscapeCharacters = new char[] { '"','\\','\b','\f','\n','\r','\t' };
+        private static readonly string EscapeCharactersString = new string(EscapeCharacters);
 
         static SimpleJson()
         {
@@ -535,7 +670,31 @@ namespace Octokit
             EscapeTable['\r'] = 'r';
             EscapeTable['\t'] = 't';
         }
+#if SIMPLE_JSON_PropertyToLowerCase
+        ///// <summary>
+        ///// Specify the serialization method that ignores the case of attributes/fields
+        ///// </summary>
+        ///// <typeparam name="T"></typeparam>
+        ///// <param name="model"></param>
+        ///// <param name="lowerCase"></param>
+        ///// <param name="onlyPublic"></param>
+        ///// <returns></returns>
+        //public static string ToJson<T>(this T model, bool lowerCase = false, bool onlyPublic = true) {
 
+        //    return SerializeObject(model, JsonSerializerExtensions.GetStrategy(lowerCase, onlyPublic));
+        //}
+        ///// <summary>
+        ///// Specify the deserialization method that ignores the case of attributes/fields
+        ///// </summary>
+        ///// <typeparam name="T"></typeparam>
+        ///// <param name="json"></param>
+        ///// <param name="lowerCase"></param>
+        ///// <param name="onlyPublic"></param>
+        ///// <returns></returns>
+        //public static T FromJson<T>(this string json, bool lowerCase = false, bool onlyPublic = true) {
+        //    return DeserializeObject<T>(json, JsonSerializerExtensions.GetStrategy(lowerCase, onlyPublic));
+        //}
+#endif
         /// <summary>
         /// Parses the string json into a value
         /// </summary>
@@ -544,9 +703,8 @@ namespace Octokit
         public static object DeserializeObject(string json)
         {
             object obj;
-            if (TryDeserializeObject(json, out obj))
+            if (TryDeserializeObject(json,out obj))
                 return obj;
-
             throw new SerializationException("Invalid JSON string");
         }
 
@@ -562,15 +720,15 @@ namespace Octokit
         /// <returns>
         /// Returns true if successfull otherwise false.
         /// </returns>
-        [SuppressMessage("Microsoft.Design", "CA1007:UseGenericsWhereAppropriate", Justification = "Need to support .NET 2")]
-        public static bool TryDeserializeObject(string json, out object obj)
+        [SuppressMessage("Microsoft.Design","CA1007:UseGenericsWhereAppropriate",Justification = "Need to support .NET 2")]
+        public static bool TryDeserializeObject(string json,out object obj)
         {
             bool success = true;
             if (json != null)
             {
                 char[] charArray = json.ToCharArray();
                 int index = 0;
-                obj = ParseValue(charArray, ref index, ref success);
+                obj = ParseValue(charArray,ref index,ref success);
             }
             else
                 obj = null;
@@ -578,27 +736,27 @@ namespace Octokit
             return success;
         }
 
-        public static object DeserializeObject(string json, Type type, IJsonSerializerStrategy jsonSerializerStrategy)
+        public static object DeserializeObject(string json,Type type,IJsonSerializerStrategy jsonSerializerStrategy)
         {
             object jsonObject = DeserializeObject(json);
-            return type == null || jsonObject != null && ReflectionUtils.IsAssignableFrom(jsonObject.GetType(), type)
+            return type == null || jsonObject != null && ReflectionUtils.IsAssignableFrom(jsonObject.GetType(),type)
                        ? jsonObject
-                       : (jsonSerializerStrategy ?? CurrentJsonSerializerStrategy).DeserializeObject(jsonObject, type);
+                       : (jsonSerializerStrategy ?? CurrentJsonSerializerStrategy).DeserializeObject(jsonObject,type);
         }
 
-        public static object DeserializeObject(string json, Type type)
+        public static object DeserializeObject(string json,Type type)
         {
-            return DeserializeObject(json, type, null);
+            return DeserializeObject(json,type,null);
         }
 
-        public static T DeserializeObject<T>(string json, IJsonSerializerStrategy jsonSerializerStrategy)
+        public static T DeserializeObject<T>(string json,IJsonSerializerStrategy jsonSerializerStrategy)
         {
-            return (T)DeserializeObject(json, typeof(T), jsonSerializerStrategy);
+            return (T)DeserializeObject(json,typeof(T),jsonSerializerStrategy);
         }
 
         public static T DeserializeObject<T>(string json)
         {
-            return (T)DeserializeObject(json, typeof(T), null);
+            return (T)DeserializeObject(json,typeof(T),null);
         }
 
         /// <summary>
@@ -607,16 +765,16 @@ namespace Octokit
         /// <param name="json">A IDictionary&lt;string,object> / IList&lt;object></param>
         /// <param name="jsonSerializerStrategy">Serializer strategy to use</param>
         /// <returns>A JSON encoded string, or null if object 'json' is not serializable</returns>
-        public static string SerializeObject(object json, IJsonSerializerStrategy jsonSerializerStrategy)
+        public static string SerializeObject(object json,IJsonSerializerStrategy jsonSerializerStrategy)
         {
             StringBuilder builder = new StringBuilder(BUILDER_CAPACITY);
-            bool success = SerializeValue(jsonSerializerStrategy, json, builder);
+            bool success = SerializeValue(jsonSerializerStrategy,json,builder);
             return (success ? builder.ToString() : null);
         }
 
         public static string SerializeObject(object json)
         {
-            return SerializeObject(json, CurrentJsonSerializerStrategy);
+            return SerializeObject(json,CurrentJsonSerializerStrategy);
         }
 
         public static string EscapeToJavascriptString(string jsonString)
@@ -677,48 +835,50 @@ namespace Octokit
             return sb.ToString();
         }
 
-        static IDictionary<string, object> ParseObject(char[] json, ref int index, ref bool success)
+        static IDictionary<string,object> ParseObject(char[] json,ref int index,ref bool success)
         {
-            IDictionary<string, object> table = new JsonObject();
+            IDictionary<string,object> table = new JsonObject();
+            //直接忽略大写可能存在问题
+            //IDictionary<string,object> table = new JsonObject(StringComparer.OrdinalIgnoreCase);
             int token;
 
             // {
-            NextToken(json, ref index);
+            NextToken(json,ref index);
 
             bool done = false;
             while (!done)
             {
-                token = LookAhead(json, index);
+                token = LookAhead(json,index);
                 if (token == TOKEN_NONE)
                 {
                     success = false;
                     return null;
                 }
                 else if (token == TOKEN_COMMA)
-                    NextToken(json, ref index);
+                    NextToken(json,ref index);
                 else if (token == TOKEN_CURLY_CLOSE)
                 {
-                    NextToken(json, ref index);
+                    NextToken(json,ref index);
                     return table;
                 }
                 else
                 {
                     // name
-                    string name = ParseString(json, ref index, ref success);
+                    string name = ParseString(json,ref index,ref success);
                     if (!success)
                     {
                         success = false;
                         return null;
                     }
                     // :
-                    token = NextToken(json, ref index);
+                    token = NextToken(json,ref index);
                     if (token != TOKEN_COLON)
                     {
                         success = false;
                         return null;
                     }
                     // value
-                    object value = ParseValue(json, ref index, ref success);
+                    object value = ParseValue(json,ref index,ref success);
                     if (!success)
                     {
                         success = false;
@@ -730,32 +890,32 @@ namespace Octokit
             return table;
         }
 
-        static JsonArray ParseArray(char[] json, ref int index, ref bool success)
+        static JsonArray ParseArray(char[] json,ref int index,ref bool success)
         {
             JsonArray array = new JsonArray();
 
             // [
-            NextToken(json, ref index);
+            NextToken(json,ref index);
 
             bool done = false;
             while (!done)
             {
-                int token = LookAhead(json, index);
+                int token = LookAhead(json,index);
                 if (token == TOKEN_NONE)
                 {
                     success = false;
                     return null;
                 }
                 else if (token == TOKEN_COMMA)
-                    NextToken(json, ref index);
+                    NextToken(json,ref index);
                 else if (token == TOKEN_SQUARED_CLOSE)
                 {
-                    NextToken(json, ref index);
+                    NextToken(json,ref index);
                     break;
                 }
                 else
                 {
-                    object value = ParseValue(json, ref index, ref success);
+                    object value = ParseValue(json,ref index,ref success);
                     if (!success)
                         return null;
                     array.Add(value);
@@ -764,26 +924,26 @@ namespace Octokit
             return array;
         }
 
-        static object ParseValue(char[] json, ref int index, ref bool success)
+        static object ParseValue(char[] json,ref int index,ref bool success)
         {
-            switch (LookAhead(json, index))
+            switch (LookAhead(json,index))
             {
                 case TOKEN_STRING:
-                    return ParseString(json, ref index, ref success);
+                    return ParseString(json,ref index,ref success);
                 case TOKEN_NUMBER:
-                    return ParseNumber(json, ref index, ref success);
+                    return ParseNumber(json,ref index,ref success);
                 case TOKEN_CURLY_OPEN:
-                    return ParseObject(json, ref index, ref success);
+                    return ParseObject(json,ref index,ref success);
                 case TOKEN_SQUARED_OPEN:
-                    return ParseArray(json, ref index, ref success);
+                    return ParseArray(json,ref index,ref success);
                 case TOKEN_TRUE:
-                    NextToken(json, ref index);
+                    NextToken(json,ref index);
                     return true;
                 case TOKEN_FALSE:
-                    NextToken(json, ref index);
+                    NextToken(json,ref index);
                     return false;
                 case TOKEN_NULL:
-                    NextToken(json, ref index);
+                    NextToken(json,ref index);
                     return null;
                 case TOKEN_NONE:
                     break;
@@ -792,13 +952,12 @@ namespace Octokit
             return null;
         }
 
-        internal static string ParseString(char[] json, ref int index, ref bool success)
+        static string ParseString(char[] json,ref int index,ref bool success)
         {
-            // Avoid allocating this StringBuilder unless a backslash is encountered in the json
             StringBuilder s = null;
             char c;
 
-            EatWhitespace(json, ref index);
+            EatWhitespace(json,ref index);
 
             // "
             c = json[index++];
@@ -851,7 +1010,7 @@ namespace Octokit
                         {
                             // parse the 32 bit hex into an integer codepoint
                             uint codePoint;
-                            if (!(success = UInt32.TryParse(new string(json, index, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out codePoint)))
+                            if (!(success = UInt32.TryParse(new string(json,index,4),NumberStyles.HexNumber,CultureInfo.InvariantCulture,out codePoint)))
                                 return "";
 
                             // convert the integer codepoint to a unicode char and add to string
@@ -862,7 +1021,7 @@ namespace Octokit
                                 if (remainingLength >= 6)
                                 {
                                     uint lowCodePoint;
-                                    if (new string(json, index, 2) == "\\u" && UInt32.TryParse(new string(json, index + 2, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out lowCodePoint))
+                                    if (new string(json,index,2) == "\\u" && UInt32.TryParse(new string(json,index + 2,4),NumberStyles.HexNumber,CultureInfo.InvariantCulture,out lowCodePoint))
                                     {
                                         if (0xDC00 <= lowCodePoint && lowCodePoint <= 0xDFFF)    // if low surrogate
                                         {
@@ -899,46 +1058,57 @@ namespace Octokit
             if (s != null)
                 return s.ToString();
 
-            return new string(json, startIndex, index - startIndex - 1);
+            return new string(json,startIndex,index - startIndex - 1);
         }
 
         private static string ConvertFromUtf32(int utf32)
         {
             // http://www.java2s.com/Open-Source/CSharp/2.6.4-mono-.net-core/System/System/Char.cs.htm
             if (utf32 < 0 || utf32 > 0x10FFFF)
-                throw new ArgumentOutOfRangeException("utf32", "The argument must be from 0 to 0x10FFFF.");
+                throw new ArgumentOutOfRangeException("utf32","The argument must be from 0 to 0x10FFFF.");
             if (0xD800 <= utf32 && utf32 <= 0xDFFF)
-                throw new ArgumentOutOfRangeException("utf32", "The argument must not be in surrogate pair range.");
+                throw new ArgumentOutOfRangeException("utf32","The argument must not be in surrogate pair range.");
             if (utf32 < 0x10000)
-                return new string((char)utf32, 1);
+                return new string((char)utf32,1);
             utf32 -= 0x10000;
-            return new string(new char[] { (char)((utf32 >> 10) + 0xD800), (char)(utf32 % 0x0400 + 0xDC00) });
+            return new string(new char[] { (char)((utf32 >> 10) + 0xD800),(char)(utf32 % 0x0400 + 0xDC00) });
         }
 
-        static object ParseNumber(char[] json, ref int index, ref bool success)
+        static object ParseNumber(char[] json,ref int index,ref bool success)
         {
-            EatWhitespace(json, ref index);
-            int lastIndex = GetLastIndexOfNumber(json, index);
+            EatWhitespace(json,ref index);
+            int lastIndex = GetLastIndexOfNumber(json,index);
             int charLength = (lastIndex - index) + 1;
             object returnNumber;
-            string str = new string(json, index, charLength);
-            if (str.IndexOf(".", StringComparison.OrdinalIgnoreCase) != -1 || str.IndexOf("e", StringComparison.OrdinalIgnoreCase) != -1)
+            string str = new string(json,index,charLength);
+            if (str.IndexOf(".",StringComparison.OrdinalIgnoreCase) != -1 || str.IndexOf("e",StringComparison.OrdinalIgnoreCase) != -1)
             {
                 double number;
-                success = double.TryParse(new string(json, index, charLength), NumberStyles.Any, CultureInfo.InvariantCulture, out number);
+                success = double.TryParse(new string(json,index,charLength),NumberStyles.Any,CultureInfo.InvariantCulture,out number);
                 returnNumber = number;
             }
             else
             {
+                //long number;
+                //success = long.TryParse(new string(json, index, charLength), NumberStyles.Any, CultureInfo.InvariantCulture, out number);
+                //returnNumber = number;
+                //Support uint, ulong
                 long number;
-                success = long.TryParse(new string(json, index, charLength), NumberStyles.Any, CultureInfo.InvariantCulture, out number);
-                returnNumber = number;
+                success = long.TryParse(new string(json,index,charLength),NumberStyles.Any,CultureInfo.InvariantCulture,out number);
+                if (success)
+                    returnNumber = number;
+                else
+                {
+                    ulong unsign_number;
+                    success = ulong.TryParse(str,NumberStyles.Any,CultureInfo.InvariantCulture,out unsign_number);
+                    returnNumber = unsign_number;
+                }
             }
             index = lastIndex + 1;
             return returnNumber;
         }
 
-        static int GetLastIndexOfNumber(char[] json, int index)
+        static int GetLastIndexOfNumber(char[] json,int index)
         {
             int lastIndex;
             for (lastIndex = index; lastIndex < json.Length; lastIndex++)
@@ -946,22 +1116,22 @@ namespace Octokit
             return lastIndex - 1;
         }
 
-        static void EatWhitespace(char[] json, ref int index)
+        static void EatWhitespace(char[] json,ref int index)
         {
             for (; index < json.Length; index++)
                 if (" \t\n\r\b\f".IndexOf(json[index]) == -1) break;
         }
 
-        static int LookAhead(char[] json, int index)
+        static int LookAhead(char[] json,int index)
         {
             int saveIndex = index;
-            return NextToken(json, ref saveIndex);
+            return NextToken(json,ref saveIndex);
         }
 
-        [SuppressMessage("Microsoft.Maintainability", "CA1502:AvoidExcessiveComplexity")]
-        static int NextToken(char[] json, ref int index)
+        [SuppressMessage("Microsoft.Maintainability","CA1502:AvoidExcessiveComplexity")]
+        static int NextToken(char[] json,ref int index)
         {
-            EatWhitespace(json, ref index);
+            EatWhitespace(json,ref index);
             if (index == json.Length)
                 return TOKEN_NONE;
             char c = json[index];
@@ -1027,43 +1197,70 @@ namespace Octokit
             return TOKEN_NONE;
         }
 
-        static bool SerializeValue(IJsonSerializerStrategy jsonSerializerStrategy, object value, StringBuilder builder)
+        static bool SerializeValue(IJsonSerializerStrategy jsonSerializerStrategy,object value,StringBuilder builder)
         {
             bool success = true;
             string stringValue = value as string;
             if (stringValue != null)
-                success = SerializeString(stringValue, builder);
+                success = SerializeString(stringValue,builder);
             else
             {
-                IDictionary<string, object> dict = value as IDictionary<string, object>;
+                IDictionary<string,object> dict = value as IDictionary<string,object>;
+                //IDictionary<string, List<string>> dict2 = value as IDictionary<string, List<string>>;
+                bool isTypeDictionary = false;
+                if (ReflectionUtils.IsTypeDictionary(value.GetType()))
+                {
+                    isTypeDictionary = true;
+                }
                 if (dict != null)
                 {
-                    success = SerializeObject(jsonSerializerStrategy, dict.Keys, dict.Values, builder);
+                    success = SerializeObject(jsonSerializerStrategy,dict.Keys,dict.Values,builder);
+                }
+                //else if (dict2 != null) {
+                //    success = SerializeObject(jsonSerializerStrategy, dict2.Keys, dict2.Values, builder);
+                //}
+                else if (isTypeDictionary)
+                {
+                    //sgd:add dictionary key  string  support
+                    // if dictionary then
+                    Type ts = value.GetType();
+                    object keys = ts.GetProperty("Keys").GetValue(value,null);
+                    object values = ts.GetProperty("Values").GetValue(value,null);
+                    //dictionary key support string               
+                    Type enumerableType = typeof(IEnumerable<string>);
+                    if (enumerableType.IsAssignableFrom(keys.GetType()) == false)
+                    {
+                        throw new Exception("SimpleJson serialize dictionary key must string type!");
+                    }
+                    success = SerializeObject(jsonSerializerStrategy,(IEnumerable)keys,(IEnumerable)values,builder);
                 }
                 else
                 {
-                    IDictionary<string, string> stringDictionary = value as IDictionary<string, string>;
+                    IDictionary<string,string> stringDictionary = value as IDictionary<string,string>;
                     if (stringDictionary != null)
                     {
-                        success = SerializeObject(jsonSerializerStrategy, stringDictionary.Keys, stringDictionary.Values, builder);
+                        success = SerializeObject(jsonSerializerStrategy,stringDictionary.Keys,stringDictionary.Values,builder);
                     }
                     else
                     {
                         IEnumerable enumerableValue = value as IEnumerable;
                         if (enumerableValue != null)
-                            success = SerializeArray(jsonSerializerStrategy, enumerableValue, builder);
+                            success = SerializeArray(jsonSerializerStrategy,enumerableValue,builder);
                         else if (IsNumeric(value))
-                            success = SerializeNumber(value, builder);
+                            success = SerializeNumber(value,builder);
                         else if (value is bool)
                             builder.Append((bool)value ? "true" : "false");
+                        // ✅ 修复：添加 char 类型支持
+                        else if (value is char)
+                            SerializeString(new string((char)value,1),builder);
                         else if (value == null)
                             builder.Append("null");
                         else
                         {
                             object serializedObject;
-                            success = jsonSerializerStrategy.TrySerializeNonPrimitiveObject(value, out serializedObject);
+                            success = jsonSerializerStrategy.TrySerializeNonPrimitiveObject(value,out serializedObject);
                             if (success)
-                                SerializeValue(jsonSerializerStrategy, serializedObject, builder);
+                                SerializeValue(jsonSerializerStrategy,serializedObject,builder);
                         }
                     }
                 }
@@ -1071,7 +1268,7 @@ namespace Octokit
             return success;
         }
 
-        static bool SerializeObject(IJsonSerializerStrategy jsonSerializerStrategy, IEnumerable keys, IEnumerable values, StringBuilder builder)
+        static bool SerializeObject(IJsonSerializerStrategy jsonSerializerStrategy,IEnumerable keys,IEnumerable values,StringBuilder builder)
         {
             builder.Append("{");
             IEnumerator ke = keys.GetEnumerator();
@@ -1085,11 +1282,12 @@ namespace Octokit
                     builder.Append(",");
                 string stringKey = key as string;
                 if (stringKey != null)
-                    SerializeString(stringKey, builder);
+                    SerializeString(stringKey,builder);
                 else
-                    if (!SerializeValue(jsonSerializerStrategy, value, builder)) return false;
+                    // FIX: 序列化 key 而不是 value
+                    if (!SerializeValue(jsonSerializerStrategy,key,builder)) return false;
                 builder.Append(":");
-                if (!SerializeValue(jsonSerializerStrategy, value, builder))
+                if (!SerializeValue(jsonSerializerStrategy,value,builder))
                     return false;
                 first = false;
             }
@@ -1097,7 +1295,7 @@ namespace Octokit
             return true;
         }
 
-        static bool SerializeArray(IJsonSerializerStrategy jsonSerializerStrategy, IEnumerable anArray, StringBuilder builder)
+        static bool SerializeArray(IJsonSerializerStrategy jsonSerializerStrategy,IEnumerable anArray,StringBuilder builder)
         {
             builder.Append("[");
             bool first = true;
@@ -1105,7 +1303,7 @@ namespace Octokit
             {
                 if (!first)
                     builder.Append(",");
-                if (!SerializeValue(jsonSerializerStrategy, value, builder))
+                if (!SerializeValue(jsonSerializerStrategy,value,builder))
                     return false;
                 first = false;
             }
@@ -1113,7 +1311,7 @@ namespace Octokit
             return true;
         }
 
-        static bool SerializeString(string aString, StringBuilder builder)
+        static bool SerializeString(string aString,StringBuilder builder)
         {
             // Happy path if there's nothing to be escaped. IndexOfAny is highly optimized (and unmanaged)
             if (aString.IndexOfAny(EscapeCharacters) == -1)
@@ -1136,60 +1334,35 @@ namespace Octokit
                 // Non ascii characters are fine, buffer them up and send them to the builder
                 // in larger chunks if possible. The escape table is a 1:1 translation table
                 // with \0 [default(char)] denoting a safe character.
-                if (Char.IsControl(c) || c == '\"' || c == '\\')
+                if (c >= EscapeTable.Length || EscapeTable[c] == default(char))
+                {
+                    safeCharacterCount++;
+                }
+                else
                 {
                     if (safeCharacterCount > 0)
                     {
-                        builder.Append(charArray, i - safeCharacterCount, safeCharacterCount);
+                        builder.Append(charArray,i - safeCharacterCount,safeCharacterCount);
                         safeCharacterCount = 0;
                     }
 
                     builder.Append('\\');
-                    switch (c)
-                    {
-                        case '\\':
-                            builder.Append('\\');
-                            break;
-                        case '\"':
-                            builder.Append('\"');
-                            break;
-                        case '\b':
-                            builder.Append('b');
-                            break;
-                        case '\f':
-                            builder.Append('f');
-                            break;
-                        case '\r':
-                            builder.Append('r');
-                            break;
-                        case '\t':
-                            builder.Append('t');
-                            break;
-                        case '\n':
-                            builder.Append('n');
-                            break;
-                        default:
-                            builder.AppendFormat("u{0:X4}", (int)c);
-                            break;
-                    }
-                }
-                else
-                {
-                    safeCharacterCount++;
+                    builder.Append(EscapeTable[c]);
                 }
             }
 
             if (safeCharacterCount > 0)
             {
-                builder.Append(charArray, charArray.Length - safeCharacterCount, safeCharacterCount);
+                builder.Append(charArray,charArray.Length - safeCharacterCount,safeCharacterCount);
             }
 
             builder.Append('"');
             return true;
         }
 
-        static bool SerializeNumber(object number, StringBuilder builder)
+        static bool SerializeNumber(object number,StringBuilder builder)
         {
+            // ✅ 修复：添加对所有数值类型的显式支持，避免精度丢失
             if (number is long)
                 builder.Append(((long)number).ToString(CultureInfo.InvariantCulture));
             else if (number is ulong)
@@ -1198,12 +1371,20 @@ namespace Octokit
                 builder.Append(((int)number).ToString(CultureInfo.InvariantCulture));
             else if (number is uint)
                 builder.Append(((uint)number).ToString(CultureInfo.InvariantCulture));
+            else if (number is short)
+                builder.Append(((short)number).ToString(CultureInfo.InvariantCulture));
+            else if (number is ushort)
+                builder.Append(((ushort)number).ToString(CultureInfo.InvariantCulture));
+            else if (number is sbyte)
+                builder.Append(((sbyte)number).ToString(CultureInfo.InvariantCulture));
+            else if (number is byte)
+                builder.Append(((byte)number).ToString(CultureInfo.InvariantCulture));
             else if (number is decimal)
                 builder.Append(((decimal)number).ToString(CultureInfo.InvariantCulture));
             else if (number is float)
                 builder.Append(((float)number).ToString(CultureInfo.InvariantCulture));
             else
-                builder.Append(Convert.ToDouble(number, CultureInfo.InvariantCulture).ToString("r", CultureInfo.InvariantCulture));
+                builder.Append(Convert.ToDouble(number,CultureInfo.InvariantCulture).ToString("r",CultureInfo.InvariantCulture));
             return true;
         }
 
@@ -1234,8 +1415,10 @@ namespace Octokit
             {
                 return _currentJsonSerializerStrategy ??
                     (_currentJsonSerializerStrategy =
-#if SIMPLE_JSON_DATACONTRACT
- DataContractJsonSerializerStrategy
+#if SIMPLE_JSON_UNITY
+    UnityJsonSerializerStrategy
+//#elif SIMPLE_JSON_DATACONTRACT
+// DataContractJsonSerializerStrategy
 #else
  PocoJsonSerializerStrategy
 #endif
@@ -1249,30 +1432,98 @@ namespace Octokit
 
         private static PocoJsonSerializerStrategy _pocoJsonSerializerStrategy;
         [EditorBrowsable(EditorBrowsableState.Advanced)]
-        public static PocoJsonSerializerStrategy PocoJsonSerializerStrategy
+        internal static PocoJsonSerializerStrategy PocoJsonSerializerStrategy
         {
             get
             {
-                return _pocoJsonSerializerStrategy ?? (_pocoJsonSerializerStrategy = new PocoJsonSerializerStrategy());
+                return _pocoJsonSerializerStrategy ?? (_pocoJsonSerializerStrategy = new DefaultJsonSerializationStrategy());
+
             }
         }
-
-#if SIMPLE_JSON_DATACONTRACT
-
-        private static DataContractJsonSerializerStrategy _dataContractJsonSerializerStrategy;
+#if SIMPLE_JSON_UNITY
+        internal static UnitySerializationStrategy _unityJsonSerializerStrategy;
         [System.ComponentModel.EditorBrowsable(EditorBrowsableState.Advanced)]
-        public static DataContractJsonSerializerStrategy DataContractJsonSerializerStrategy
+        public static UnitySerializationStrategy UnityJsonSerializerStrategy {
+            get {
+                return _unityJsonSerializerStrategy ?? (_unityJsonSerializerStrategy = new UnitySerializationStrategy());
+            }
+        }
+        //#elif SIMPLE_JSON_DATACONTRACT
+
+        //        private static DataContractJsonSerializerStrategy _dataContractJsonSerializerStrategy;
+        //        [System.ComponentModel.EditorBrowsable(EditorBrowsableState.Advanced)]
+        //        public static DataContractJsonSerializerStrategy DataContractJsonSerializerStrategy {
+        //            get {
+        //                return _dataContractJsonSerializerStrategy ?? (_dataContractJsonSerializerStrategy = new DataContractJsonSerializerStrategy());
+        //            }
+        //        }
+
+#endif
+
+#if UNITY_EDITOR || !AOT
+        private static readonly Dictionary<string,Type> _aotTypeRegistry = new Dictionary<string,Type>();
+        private static readonly object _registryLock = new object();
+
+        public static void RegisterAotType(string typeName,Type type)
         {
-            get
+            if (type == null)
+                throw new ArgumentNullException(nameof(type));
+
+            lock (_registryLock)
             {
-                return _dataContractJsonSerializerStrategy ?? (_dataContractJsonSerializerStrategy = new DataContractJsonSerializerStrategy());
+                _aotTypeRegistry[typeName] = type;
             }
         }
 
+        public static Type GetRegisteredAotType(string typeName)
+        {
+            lock (_registryLock)
+            {
+                return _aotTypeRegistry.TryGetValue(typeName,out var type) ? type : null;
+            }
+        }
+
+        public static void InitializeCommonAotTypes()
+        {
+            RegisterAotType("Dictionary<String,Object>",typeof(Dictionary<string,object>));
+            RegisterAotType("Dictionary<String,String>",typeof(Dictionary<string,string>));
+            RegisterAotType("Dictionary<String,Int32>",typeof(Dictionary<string,int>));
+            RegisterAotType("Dictionary<String,Int64>",typeof(Dictionary<string,long>));
+            RegisterAotType("Dictionary<String,Boolean>",typeof(Dictionary<string,bool>));
+            RegisterAotType("Dictionary<String,Double>",typeof(Dictionary<string,double>));
+            RegisterAotType("List<Object>",typeof(List<object>));
+            RegisterAotType("List<String>",typeof(List<string>));
+            RegisterAotType("List<Int32>",typeof(List<int>));
+            RegisterAotType("List<Int64>",typeof(List<long>));
+            RegisterAotType("List<Boolean>",typeof(List<bool>));
+            RegisterAotType("List<Double>",typeof(List<double>));
+        }
+
+        public static bool IsAotEnvironment
+        {
+            get
+            {
+#if UNITY_EDITOR
+                return false;
+#elif AOT
+                return true;
+#else
+                return false;
+#endif
+            }
+        }
+
+        public static void ClearReflectionCache()
+        {
+            if (CurrentJsonSerializerStrategy is PocoJsonSerializerStrategy strategy)
+            {
+                strategy.ClearCache();
+            }
+        }
 #endif
     }
 
-    [GeneratedCode("simple-json", "1.0.0")]
+    [GeneratedCode("simple-json","1.0.0")]
 #if SIMPLE_JSON_INTERNAL
     internal
 #else
@@ -1280,44 +1531,35 @@ namespace Octokit
 #endif
  interface IJsonSerializerStrategy
     {
-        [SuppressMessage("Microsoft.Design", "CA1007:UseGenericsWhereAppropriate", Justification = "Need to support .NET 2")]
-        bool TrySerializeNonPrimitiveObject(object input, out object output);
-        object DeserializeObject(object value, Type type);
+        [SuppressMessage("Microsoft.Design","CA1007:UseGenericsWhereAppropriate",Justification = "Need to support .NET 2")]
+        bool TrySerializeNonPrimitiveObject(object input,out object output);
+        object DeserializeObject(object value,Type type);
     }
-
-    [GeneratedCode("simple-json", "1.0.0")]
+    /// <summary>
+    /// base Json Serializer Strategy
+    /// </summary>
+    [GeneratedCode("simple-json","1.0.0")]
 #if SIMPLE_JSON_INTERNAL
     internal
 #else
     public
 #endif
- class PocoJsonSerializerStrategy : IJsonSerializerStrategy
+    abstract class PocoJsonSerializerStrategy : IJsonSerializerStrategy
     {
-        internal IDictionary<Type, ReflectionUtils.ConstructorDelegate> ConstructorCache;
-        internal IDictionary<Type, IDictionary<string, ReflectionUtils.GetDelegate>> GetCache;
-        internal IDictionary<Type, IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>>> SetCache;
+        internal IDictionary<Type,ReflectionUtils.ConstructorDelegate> ConstructorCache;
+        internal IDictionary<Type,IDictionary<string,ReflectionUtils.GetDelegate>> GetCache;
+        internal IDictionary<Type,IDictionary<string,KeyValuePair<Type,ReflectionUtils.SetDelegate>>> SetCache;
 
         internal static readonly Type[] EmptyTypes = new Type[0];
         internal static readonly Type[] ArrayConstructorParameterTypes = new Type[] { typeof(int) };
 
-        private static readonly string[] Iso8601Format = new string[]
-                                                             {
-                                                                 @"yyyy-MM-dd\THH:mm:ss.FFFFFFF\Z",
-                                                                 @"yyyy-MM-dd\THH:mm:ss.FFFFFFFK",
-                                                                 @"yyyy-MM-dd\THH:mm:ss\Z",
-                                                                 @"yyyy-MM-dd\THH:mm:ssK"
-                                                             };
-
+        private static readonly string[] Iso8601Format = Constants.Iso8601Formats;
+        protected bool onlyPublic = true;
         public PocoJsonSerializerStrategy()
         {
-            ConstructorCache = new ReflectionUtils.ThreadSafeDictionary<Type, ReflectionUtils.ConstructorDelegate>(ContructorDelegateFactory);
-            GetCache = new ReflectionUtils.ThreadSafeDictionary<Type, IDictionary<string, ReflectionUtils.GetDelegate>>(GetterValueFactory);
-            SetCache = new ReflectionUtils.ThreadSafeDictionary<Type, IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>>>(SetterValueFactory);
-        }
-
-        protected virtual string MapClrMemberToJsonFieldName(MemberInfo member)
-        {
-            return MapClrMemberNameToJsonFieldName(member.Name);
+            ConstructorCache = new ReflectionUtils.ThreadSafeDictionary<Type,ReflectionUtils.ConstructorDelegate>(ContructorDelegateFactory);
+            GetCache = new ReflectionUtils.ThreadSafeDictionary<Type,IDictionary<string,ReflectionUtils.GetDelegate>>(GetterValueFactory);
+            SetCache = new ReflectionUtils.ThreadSafeDictionary<Type,IDictionary<string,KeyValuePair<Type,ReflectionUtils.SetDelegate>>>(SetterValueFactory);
         }
 
         protected virtual string MapClrMemberNameToJsonFieldName(string clrPropertyName)
@@ -1327,60 +1569,158 @@ namespace Octokit
 
         internal virtual ReflectionUtils.ConstructorDelegate ContructorDelegateFactory(Type key)
         {
-            return ReflectionUtils.GetContructor(key, key.IsArray ? ArrayConstructorParameterTypes : EmptyTypes);
+            return ReflectionUtils.GetContructor(key,(key.IsArray || ReflectionUtils.IsAssignableFrom(typeof(IList),key)) ? ArrayConstructorParameterTypes : EmptyTypes);
         }
 
-        internal virtual IDictionary<string, ReflectionUtils.GetDelegate> GetterValueFactory(Type type)
+        internal virtual IDictionary<string,ReflectionUtils.GetDelegate> GetterValueFactory(Type type)
         {
-            IDictionary<string, ReflectionUtils.GetDelegate> result = new Dictionary<string, ReflectionUtils.GetDelegate>();
+            IDictionary<string,ReflectionUtils.GetDelegate> result = new Dictionary<string,ReflectionUtils.GetDelegate>();
+            // This prevents an group of exceptions thrown when a *thrown* exception is caught and serialized into JSON.
+            // Throwing adds a properties which cannot be got via the reflective code used and, even if these are bypassed,
+            // adds properties which when traversed cause an infinite loop - resulting in a stack overflow.
+            if (type.FullName == "System.Reflection.RuntimeMethodInfo" && type.IsSealed && type.IsNotPublic)
+            {
+                return result;
+            }
             foreach (PropertyInfo propertyInfo in ReflectionUtils.GetProperties(type))
             {
                 if (propertyInfo.CanRead)
                 {
                     MethodInfo getMethod = ReflectionUtils.GetGetterMethodInfo(propertyInfo);
-                    if (getMethod.IsStatic || !getMethod.IsPublic)
+                    if (!CanAddProperty(propertyInfo,getMethod))
                         continue;
-                    result[MapClrMemberToJsonFieldName(propertyInfo)] = ReflectionUtils.GetGetMethod(propertyInfo);
+                    // JsonAliasAttribute: 序列化时使用别名作为 JSON key
+                    JsonAliasAttribute alias = (JsonAliasAttribute)ReflectionUtils.GetAttribute(propertyInfo,typeof(JsonAliasAttribute));
+                    string jsonKey = alias != null ? alias.Alias : MapClrMemberNameToJsonFieldName(propertyInfo.Name);
+                    result[jsonKey] = ReflectionUtils.GetGetMethod(propertyInfo);
                 }
             }
             foreach (FieldInfo fieldInfo in ReflectionUtils.GetFields(type))
             {
-                if (fieldInfo.IsStatic || !fieldInfo.IsPublic)
+                if (!CanAddField(fieldInfo))
                     continue;
-                result[MapClrMemberToJsonFieldName(fieldInfo)] = ReflectionUtils.GetGetMethod(fieldInfo);
+                // JsonAliasAttribute: 序列化时使用别名作为 JSON key
+                JsonAliasAttribute alias = (JsonAliasAttribute)ReflectionUtils.GetAttribute(fieldInfo,typeof(JsonAliasAttribute));
+                string jsonKey = alias != null ? alias.Alias : MapClrMemberNameToJsonFieldName(fieldInfo.Name);
+                result[jsonKey] = ReflectionUtils.GetGetMethod(fieldInfo);
             }
             return result;
         }
 
-        internal virtual IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>> SetterValueFactory(Type type)
+        internal virtual IDictionary<string,KeyValuePair<Type,ReflectionUtils.SetDelegate>> SetterValueFactory(Type type)
         {
-            IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>> result = new Dictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>>();
+            IDictionary<string,KeyValuePair<Type,ReflectionUtils.SetDelegate>> result = new Dictionary<string,KeyValuePair<Type,ReflectionUtils.SetDelegate>>();
             foreach (PropertyInfo propertyInfo in ReflectionUtils.GetProperties(type))
             {
                 if (propertyInfo.CanWrite)
                 {
                     MethodInfo setMethod = ReflectionUtils.GetSetterMethodInfo(propertyInfo);
-                    if (setMethod.IsStatic || !setMethod.IsPublic)
+                    if (!CanAddProperty(propertyInfo,setMethod))
                         continue;
-                    result[MapClrMemberToJsonFieldName(propertyInfo)] = new KeyValuePair<Type, ReflectionUtils.SetDelegate>(propertyInfo.PropertyType, ReflectionUtils.GetSetMethod(propertyInfo));
+                    var setter = new KeyValuePair<Type,ReflectionUtils.SetDelegate>(propertyInfo.PropertyType,ReflectionUtils.GetSetMethod(propertyInfo));
+                    // JsonAliasAttribute: 反序列化时使用别名作为 JSON key
+                    JsonAliasAttribute alias = (JsonAliasAttribute)ReflectionUtils.GetAttribute(propertyInfo,typeof(JsonAliasAttribute));
+                    if (alias != null)
+                    {
+                        result[alias.Alias] = setter;
+                        // AcceptOriginal: 同时也接受原始属性名（camelCase/原名）
+                        if (alias.AcceptOriginal)
+                            result[MapClrMemberNameToJsonFieldName(propertyInfo.Name)] = setter;
+                    }
+                    else
+                    {
+                        result[MapClrMemberNameToJsonFieldName(propertyInfo.Name)] = setter;
+                    }
                 }
             }
             foreach (FieldInfo fieldInfo in ReflectionUtils.GetFields(type))
             {
-                if (fieldInfo.IsInitOnly || fieldInfo.IsStatic || !fieldInfo.IsPublic)
+                if (fieldInfo.IsInitOnly || !CanAddField(fieldInfo))
                     continue;
-                result[MapClrMemberToJsonFieldName(fieldInfo)] = new KeyValuePair<Type, ReflectionUtils.SetDelegate>(fieldInfo.FieldType, ReflectionUtils.GetSetMethod(fieldInfo));
+                var setter = new KeyValuePair<Type,ReflectionUtils.SetDelegate>(fieldInfo.FieldType,ReflectionUtils.GetSetMethod(fieldInfo));
+                // JsonAliasAttribute: 反序列化时使用别名作为 JSON key
+                JsonAliasAttribute alias = (JsonAliasAttribute)ReflectionUtils.GetAttribute(fieldInfo,typeof(JsonAliasAttribute));
+                if (alias != null)
+                {
+                    result[alias.Alias] = setter;
+                    // AcceptOriginal: 同时也接受原始字段名
+                    if (alias.AcceptOriginal)
+                        result[MapClrMemberNameToJsonFieldName(fieldInfo.Name)] = setter;
+                }
+                else
+                {
+                    result[MapClrMemberNameToJsonFieldName(fieldInfo.Name)] = setter;
+                }
             }
             return result;
         }
 
-        public virtual bool TrySerializeNonPrimitiveObject(object input, out object output)
+        protected virtual bool CanAddField(FieldInfo field)
         {
-            return TrySerializeKnownTypes(input, out output) || TrySerializeUnknownTypes(input, out output);
+            if (field.IsStatic)
+                return false;
+            if (ReflectionUtils.GetAttribute(field,typeof(JsonIgnoreAttribute)) != null)
+                return false;
+            if (ReflectionUtils.GetAttribute(field,typeof(CompilerGeneratedAttribute)) != null)
+                return false;
+            //sgd
+            if (ReflectionUtils.GetAttribute(field,typeof(JsonIncludeAttribute)) != null)
+            {
+                //sgd:jsoninclude֧ 
+                return true;
+            }
+            else if (onlyPublic && field.IsPublic == false)
+            {
+                //sgd:only public
+                return false;
+            }
+            return true;
         }
 
-        [SuppressMessage("Microsoft.Maintainability", "CA1502:AvoidExcessiveComplexity")]
-        public virtual object DeserializeObject(object value, Type type)
+        protected virtual bool CanAddProperty(PropertyInfo property,MethodInfo method)
+        {
+            if (method.IsStatic)
+                return false;
+            if (ReflectionUtils.GetAttribute(property,typeof(JsonIgnoreAttribute)) != null)
+                return false;
+            // if this is an indexed getter (i.e. this[int] property getter), skip it,
+            // since it's a helper-only type getter for C# syntactic sugar
+#if NET35 || NET40
+             if (property.GetGetMethod().GetParameters().Length > 0){
+                return false;
+             }
+#else
+            if (property.GetMethod.GetParameters().Length > 0)
+                return false;
+#endif
+            //sgd
+            if (method.IsPublic)
+            {
+                //sgd:public method
+                return true;
+            }
+            if (ReflectionUtils.GetAttribute(property,typeof(JsonIncludeAttribute)) != null)
+            {
+                //sgd:json include
+                return true;
+            }
+            else if (onlyPublic && method.Name.StartsWith("get_"))
+            {
+                //sgd:only public
+                // getter:
+                return false;
+            }
+
+            return true;
+        }
+
+        public virtual bool TrySerializeNonPrimitiveObject(object input,out object output)
+        {
+            return TrySerializeKnownTypes(input,out output) || TrySerializeUnknownTypes(input,out output);
+        }
+
+        [SuppressMessage("Microsoft.Maintainability","CA1502:AvoidExcessiveComplexity")]
+        public virtual object DeserializeObject(object value,Type type)
         {
             if (type == null) throw new ArgumentNullException("type");
             string str = value as string;
@@ -1397,18 +1737,38 @@ namespace Octokit
             {
                 if (str.Length != 0) // We know it can't be null now.
                 {
+                    //if (type == typeof(NPath) || (ReflectionUtils.IsNullableType(type) && Nullable.GetUnderlyingType(type) == typeof(NPath)))
+                    //    return new NPath(str);
                     if (type == typeof(DateTime) || (ReflectionUtils.IsNullableType(type) && Nullable.GetUnderlyingType(type) == typeof(DateTime)))
-                        return DateTime.ParseExact(str, Iso8601Format, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+                        return DateTime.ParseExact(str,Iso8601Format,CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
                     if (type == typeof(DateTimeOffset) || (ReflectionUtils.IsNullableType(type) && Nullable.GetUnderlyingType(type) == typeof(DateTimeOffset)))
-                        return DateTimeOffset.ParseExact(str, Iso8601Format, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+                        return DateTimeOffset.ParseExact(str,Iso8601Format,CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+                    // ✅ 修复：添加 TimeSpan 反序列化支持
+                    if (type == typeof(TimeSpan) || (ReflectionUtils.IsNullableType(type) && Nullable.GetUnderlyingType(type) == typeof(TimeSpan)))
+                    {
+                        if (long.TryParse(str,out long ticks))
+                            return new TimeSpan(ticks);
+                        return TimeSpan.Parse(str,CultureInfo.InvariantCulture);
+                    }
+                    // ✅ 修复：添加 char 反序列化支持
+                    if (type == typeof(char) || (ReflectionUtils.IsNullableType(type) && Nullable.GetUnderlyingType(type) == typeof(char)))
+                    {
+                        if (str.Length == 1)
+                            return str[0];
+                        else if (str.Length > 0)
+                            return str[0];
+                        return default(char);
+                    }
                     if (type == typeof(Guid) || (ReflectionUtils.IsNullableType(type) && Nullable.GetUnderlyingType(type) == typeof(Guid)))
                         return new Guid(str);
+                    //if (type == typeof(UriString) || (ReflectionUtils.IsNullableType(type) && Nullable.GetUnderlyingType(type) == typeof(UriString)))
+                    //    return new UriString(str);
                     if (type == typeof(Uri))
                     {
-                        bool isValid = Uri.IsWellFormedUriString(str, UriKind.RelativeOrAbsolute);
+                        bool isValid = Uri.IsWellFormedUriString(str,UriKind.RelativeOrAbsolute);
 
                         Uri result;
-                        if (isValid && Uri.TryCreate(str, UriKind.RelativeOrAbsolute, out result))
+                        if (isValid && Uri.TryCreate(str,UriKind.RelativeOrAbsolute,out result))
                             return result;
 
                         return null;
@@ -1417,7 +1777,7 @@ namespace Octokit
                     if (type == typeof(string))
                         return str;
 
-                    return Convert.ChangeType(str, type, CultureInfo.InvariantCulture);
+                    return Convert.ChangeType(str,type,CultureInfo.InvariantCulture);
                 }
                 else
                 {
@@ -1436,33 +1796,22 @@ namespace Octokit
                 return value;
 
             bool valueIsLong = value is long;
+            bool valueIsULong = value is ulong;
             bool valueIsDouble = value is double;
-            if ((valueIsLong && type == typeof(long)) || (valueIsDouble && type == typeof(double)))
+            if ((valueIsLong && type == typeof(long)) || (valueIsULong && type == typeof(ulong)) || (valueIsDouble && type == typeof(double)))
                 return value;
-            if (valueIsLong && type == typeof(IReadOnlyList<long>))
-                obj = new long[] { (long)value };
-            else if ((valueIsDouble && type != typeof(double)) || (valueIsLong && type != typeof(long)))
+            if ((valueIsDouble && type != typeof(double)) || (valueIsULong && type != typeof(ulong)) || (valueIsLong && type != typeof(long)))
             {
-                if (valueIsLong && (type == typeof(DateTimeOffset) || type == typeof(DateTimeOffset?)))
-                {
-                    return DateTimeOffset.FromUnixTimeSeconds((long)value);
-                }
-                else if (valueIsLong && (type == typeof(DateTime) || type == typeof(DateTime?)))
-                {
-                    return DateTimeOffset.FromUnixTimeSeconds((long)value).DateTime;
-                }
-                obj = type == typeof(int) || type == typeof(long) || type == typeof(double) || type == typeof(float) || type == typeof(bool) || type == typeof(decimal) || type == typeof(byte) || type == typeof(short)
-                            ? Convert.ChangeType(value, type, CultureInfo.InvariantCulture)
+                obj = type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong) || type == typeof(double) || type == typeof(float) || type == typeof(bool) || type == typeof(decimal) || type == typeof(byte) || type == typeof(short)
+                            ? Convert.ChangeType(value,type,CultureInfo.InvariantCulture)
                             : value;
             }
-            else if (type == typeof(object) || (ReflectionUtils.IsNullableType(type) && Nullable.GetUnderlyingType(type) == typeof(object)))
-                obj = value;
             else
             {
-                IDictionary<string, object> objects = value as IDictionary<string, object>;
+                IDictionary<string,object> objects = value as IDictionary<string,object>;
                 if (objects != null)
                 {
-                    IDictionary<string, object> jsonObject = objects;
+                    IDictionary<string,object> jsonObject = objects;
 
                     if (ReflectionUtils.IsTypeDictionary(type))
                     {
@@ -1471,28 +1820,18 @@ namespace Octokit
                         Type keyType = types[0];
                         Type valueType = types[1];
 
-                        Type genericType = typeof(Dictionary<,>).MakeGenericType(keyType, valueType);
+                        IDictionary dict;
+#if UNITY_EDITOR || !AOT
+                        Type genericType = typeof(Dictionary<,>).MakeGenericType(keyType,valueType);
+                        dict = (IDictionary)ConstructorCache[genericType]();
+#else
+                        dict = CreateDictionaryForAot(keyType, valueType);
+#endif
 
-                        IDictionary dict = (IDictionary)ConstructorCache[genericType]();
-
-                        foreach (KeyValuePair<string, object> kvp in jsonObject)
-                            dict.Add(kvp.Key, DeserializeObject(kvp.Value, valueType));
+                        foreach (KeyValuePair<string,object> kvp in jsonObject)
+                            dict.Add(kvp.Key,DeserializeObject(kvp.Value,valueType));
 
                         obj = dict;
-
-#if SIMPLE_JSON_READONLY_COLLECTIONS
-                        // Wrap dictionary in a ReadOnlyDictionary<,>
-                        var genericTypeDefinition = type.GetGenericTypeDefinition();
-                        if (genericTypeDefinition == typeof(IReadOnlyDictionary<,>) ||
-                            genericTypeDefinition == typeof(ReadOnlyDictionary<,>))
-                        {
-                            var ctorType = typeof(IDictionary<,>).MakeGenericType(keyType, valueType);
-                            var genericReadonlyType = typeof(ReadOnlyDictionary<,>).MakeGenericType(keyType, valueType);
-                            var ctor = ReflectionUtils.GetContructor(genericReadonlyType, new Type[] { ctorType });
-                            Debug.Assert(ctor != null);
-                            obj = ctor.Invoke(new[] { obj });
-                        }
-#endif
                     }
                     else
                     {
@@ -1501,13 +1840,33 @@ namespace Octokit
                         else
                         {
                             obj = ConstructorCache[type]();
-                            foreach (KeyValuePair<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>> setter in SetCache[type])
+                            // 构建一个大小写不敏感的 JSON key 查找表，用于兜底匹配
+                            // SetCache 中的 key 是经过 MapClrMemberNameToJsonFieldName 转换后的名字（可能是 camelCase）
+                            // 而 JSON 中的 key 可能大小写不一致，TryGetValue 是精确匹配，故需要兜底
+                            IDictionary<string,object> jsonObjInsensitive = null;
+                            foreach (KeyValuePair<string,KeyValuePair<Type,ReflectionUtils.SetDelegate>> setter in SetCache[type])
                             {
                                 object jsonValue;
-                                if (jsonObject.TryGetValue(setter.Key, out jsonValue))
+                                if (jsonObject.TryGetValue(setter.Key,out jsonValue))
                                 {
-                                    jsonValue = DeserializeObject(jsonValue, setter.Value.Key);
-                                    setter.Value.Value(obj, jsonValue);
+                                    jsonValue = DeserializeObject(jsonValue,setter.Value.Key);
+                                    setter.Value.Value(obj,jsonValue);
+                                }
+                                else
+                                {
+                                    // 大小写不敏感兜底：延迟构建，避免每次都创建
+                                    if (jsonObjInsensitive == null)
+                                    {
+                                        jsonObjInsensitive = new Dictionary<string,object>(StringComparer.OrdinalIgnoreCase);
+                                        foreach (var kv in jsonObject)
+                                            if (!jsonObjInsensitive.ContainsKey(kv.Key))
+                                                jsonObjInsensitive[kv.Key] = kv.Value;
+                                    }
+                                    if (jsonObjInsensitive.TryGetValue(setter.Key,out jsonValue))
+                                    {
+                                        jsonValue = DeserializeObject(jsonValue,setter.Value.Key);
+                                        setter.Value.Value(obj,jsonValue);
+                                    }
                                 }
                             }
                         }
@@ -1526,14 +1885,18 @@ namespace Octokit
                             list = (IList)ConstructorCache[type](jsonObject.Count);
                             int i = 0;
                             foreach (object o in jsonObject)
-                                list[i++] = DeserializeObject(o, type.GetElementType());
+                                list[i++] = DeserializeObject(o,type.GetElementType());
                         }
-                        else if (ReflectionUtils.IsTypeGenericeCollectionInterface(type) || ReflectionUtils.IsAssignableFrom(typeof(IList), type))
+                        else if (ReflectionUtils.IsTypeGenericeCollectionInterface(type) || ReflectionUtils.IsAssignableFrom(typeof(IList),type))
                         {
                             Type innerType = ReflectionUtils.GetGenericListElementType(type);
+#if UNITY_EDITOR || !AOT
                             list = (IList)(ConstructorCache[type] ?? ConstructorCache[typeof(List<>).MakeGenericType(innerType)])(jsonObject.Count);
+#else
+                            list = CreateListForAot(innerType, jsonObject.Count);
+#endif
                             foreach (object o in jsonObject)
-                                list.Add(DeserializeObject(o, innerType));
+                                list.Add(DeserializeObject(o,innerType));
                         }
                         obj = list;
                     }
@@ -1541,23 +1904,28 @@ namespace Octokit
                 return obj;
             }
             if (ReflectionUtils.IsNullableType(type))
-                return ReflectionUtils.ToNullableType(obj, type);
+                return ReflectionUtils.ToNullableType(obj,type);
             return obj;
         }
 
         protected virtual object SerializeEnum(Enum p)
         {
-            return Convert.ToDouble(p, CultureInfo.InvariantCulture);
+            return Convert.ToDouble(p,CultureInfo.InvariantCulture);
         }
 
-        [SuppressMessage("Microsoft.Design", "CA1007:UseGenericsWhereAppropriate", Justification = "Need to support .NET 2")]
-        protected virtual bool TrySerializeKnownTypes(object input, out object output)
+        [SuppressMessage("Microsoft.Design","CA1007:UseGenericsWhereAppropriate",Justification = "Need to support .NET 2")]
+        protected virtual bool TrySerializeKnownTypes(object input,out object output)
         {
             bool returnValue = true;
+            //if (input is NPath || input is UriString)
+            //    output = input.ToString();
             if (input is DateTime)
-                output = ((DateTime)input).ToUniversalTime().ToString(Iso8601Format[0], CultureInfo.InvariantCulture);
+                output = ((DateTime)input).ToUniversalTime().ToString(Iso8601Format[0],CultureInfo.InvariantCulture);
             else if (input is DateTimeOffset)
-                output = ((DateTimeOffset)input).ToUniversalTime().ToString(Iso8601Format[0], CultureInfo.InvariantCulture);
+                output = ((DateTimeOffset)input).ToUniversalTime().ToString(Iso8601Format[0],CultureInfo.InvariantCulture);
+            // ✅ 修复：添加 TimeSpan 支持
+            else if (input is TimeSpan)
+                output = ((TimeSpan)input).Ticks.ToString(CultureInfo.InvariantCulture);
             else if (input is Guid)
                 output = ((Guid)input).ToString("D");
             else if (input is Uri)
@@ -1575,124 +1943,434 @@ namespace Octokit
             }
             return returnValue;
         }
-        [SuppressMessage("Microsoft.Design", "CA1007:UseGenericsWhereAppropriate", Justification = "Need to support .NET 2")]
-        protected virtual bool TrySerializeUnknownTypes(object input, out object output)
+        [SuppressMessage("Microsoft.Design","CA1007:UseGenericsWhereAppropriate",Justification = "Need to support .NET 2")]
+        protected virtual bool TrySerializeUnknownTypes(object input,out object output)
         {
             if (input == null) throw new ArgumentNullException("input");
             output = null;
             Type type = input.GetType();
             if (type.FullName == null)
                 return false;
-            IDictionary<string, object> obj = new JsonObject();
-            IDictionary<string, ReflectionUtils.GetDelegate> getters = GetCache[type];
-            foreach (KeyValuePair<string, ReflectionUtils.GetDelegate> getter in getters)
+            IDictionary<string,object> obj = new JsonObject();//
+            //sgd:There might be a problem with directly ignoring case here. 直接在这里忽略大小写可能存在问题
+            //IDictionary<string,object> obj = new JsonObject(StringComparer.OrdinalIgnoreCase);
+            IDictionary<string,ReflectionUtils.GetDelegate> getters = GetCache[type];
+            foreach (KeyValuePair<string,ReflectionUtils.GetDelegate> getter in getters)
             {
                 if (getter.Value != null)
-                    obj.Add(getter.Key, getter.Value(input));
+                    obj.Add(MapClrMemberNameToJsonFieldName(getter.Key),getter.Value(input));
             }
             output = obj;
             return true;
         }
+
+        public void ClearCache()
+        {
+            ConstructorCache.Clear();
+            GetCache.Clear();
+            SetCache.Clear();
+        }
+
+        private static IDictionary CreateDictionaryForAot(Type keyType,Type valueType)
+        {
+            // ✅ 修复：添加更多类型组合以提高 AOT 兼容性
+            if (keyType == typeof(string) && valueType == typeof(object))
+                return new Dictionary<string,object>();
+            if (keyType == typeof(string) && valueType == typeof(string))
+                return new Dictionary<string,string>();
+            if (keyType == typeof(string) && valueType == typeof(int))
+                return new Dictionary<string,int>();
+            if (keyType == typeof(string) && valueType == typeof(long))
+                return new Dictionary<string,long>();
+            if (keyType == typeof(string) && valueType == typeof(bool))
+                return new Dictionary<string,bool>();
+            if (keyType == typeof(string) && valueType == typeof(double))
+                return new Dictionary<string,double>();
+            if (keyType == typeof(string) && valueType == typeof(float))
+                return new Dictionary<string,float>();
+            if (keyType == typeof(string) && valueType == typeof(decimal))
+                return new Dictionary<string,decimal>();
+            if (keyType == typeof(string) && valueType == typeof(uint))
+                return new Dictionary<string,uint>();
+            if (keyType == typeof(string) && valueType == typeof(byte))
+                return new Dictionary<string,byte>();
+            if (keyType == typeof(string) && valueType == typeof(short))
+                return new Dictionary<string,short>();
+            if (keyType == typeof(string) && valueType == typeof(sbyte))
+                return new Dictionary<string,sbyte>();
+            if (keyType == typeof(string) && valueType == typeof(ushort))
+                return new Dictionary<string,ushort>();
+            if (keyType == typeof(string) && valueType == typeof(char))
+                return new Dictionary<string,char>();
+            if (keyType == typeof(string) && valueType == typeof(DateTime))
+                return new Dictionary<string,DateTime>();
+            if (keyType == typeof(string) && valueType == typeof(Guid))
+                return new Dictionary<string,Guid>();
+
+            Type genericType = typeof(Dictionary<,>).MakeGenericType(keyType,valueType);
+            try
+            {
+                return (IDictionary)Activator.CreateInstance(genericType);
+            }
+            catch
+            {
+                try
+                {
+                    return (IDictionary)FormatterServices.GetUninitializedObject(genericType);
+                }
+                catch
+                {
+                    throw new NotSupportedException(
+                        $"Dictionary<{keyType.Name}, {valueType.Name}> is not supported in AOT environment. " +
+                        $"Please register this type using SimpleJson.RegisterAotType().");
+                }
+            }
+        }
+
+        private static IList CreateListForAot(Type elementType,int capacity)
+        {
+            // ✅ 修复：添加更多类型以提高 AOT 兼容性
+            if (elementType == typeof(object))
+                return new List<object>(capacity);
+            if (elementType == typeof(string))
+                return new List<string>(capacity);
+            if (elementType == typeof(int))
+                return new List<int>(capacity);
+            if (elementType == typeof(long))
+                return new List<long>(capacity);
+            if (elementType == typeof(bool))
+                return new List<bool>(capacity);
+            if (elementType == typeof(double))
+                return new List<double>(capacity);
+            if (elementType == typeof(float))
+                return new List<float>(capacity);
+            if (elementType == typeof(byte))
+                return new List<byte>(capacity);
+            if (elementType == typeof(short))
+                return new List<short>(capacity);
+            if (elementType == typeof(uint))
+                return new List<uint>(capacity);
+            if (elementType == typeof(decimal))
+                return new List<decimal>(capacity);
+            if (elementType == typeof(sbyte))
+                return new List<sbyte>(capacity);
+            if (elementType == typeof(ushort))
+                return new List<ushort>(capacity);
+            if (elementType == typeof(char))
+                return new List<char>(capacity);
+            if (elementType == typeof(DateTime))
+                return new List<DateTime>(capacity);
+            if (elementType == typeof(Guid))
+                return new List<Guid>(capacity);
+
+            Type genericType = typeof(List<>).MakeGenericType(elementType);
+            try
+            {
+                return (IList)Activator.CreateInstance(genericType,capacity);
+            }
+            catch
+            {
+                try
+                {
+                    return (IList)FormatterServices.GetUninitializedObject(genericType);
+                }
+                catch
+                {
+                    throw new NotSupportedException(
+                        $"List<{elementType.Name}> is not supported in AOT environment. " +
+                        $"Please register this type using SimpleJson.RegisterAotType().");
+                }
+            }
+        }
     }
 
 #if SIMPLE_JSON_DATACONTRACT
-    [GeneratedCode("simple-json", "1.0.0")]
+//    [GeneratedCode("simple-json", "1.0.0")]
+//#if SIMPLE_JSON_INTERNAL
+//    internal
+//#else
+//    public
+//#endif
+// class DataContractJsonSerializerStrategy : PocoJsonSerializerStrategy {
+//        public DataContractJsonSerializerStrategy() {
+//            GetCache = new ReflectionUtils.ThreadSafeDictionary<Type, IDictionary<string, ReflectionUtils.GetDelegate>>(GetterValueFactory);
+//            SetCache = new ReflectionUtils.ThreadSafeDictionary<Type, IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>>>(SetterValueFactory);
+//        }
+
+//        internal override IDictionary<string, ReflectionUtils.GetDelegate> GetterValueFactory(Type type) {
+//            bool hasDataContract = ReflectionUtils.GetAttribute(type, typeof(DataContractAttribute)) != null;
+//            if (!hasDataContract)
+//                return base.GetterValueFactory(type);
+//            string jsonKey;
+//            IDictionary<string, ReflectionUtils.GetDelegate> result = new Dictionary<string, ReflectionUtils.GetDelegate>();
+//            foreach (PropertyInfo propertyInfo in ReflectionUtils.GetProperties(type)) {
+//                if (propertyInfo.CanRead) {
+//                    MethodInfo getMethod = ReflectionUtils.GetGetterMethodInfo(propertyInfo);
+//                    if (!getMethod.IsStatic && CanAdd(propertyInfo, out jsonKey))
+//                        result[jsonKey] = ReflectionUtils.GetGetMethod(propertyInfo);
+//                }
+//            }
+//            foreach (FieldInfo fieldInfo in ReflectionUtils.GetFields(type)) {
+//                if (!fieldInfo.IsStatic && CanAdd(fieldInfo, out jsonKey))
+//                    result[jsonKey] = ReflectionUtils.GetGetMethod(fieldInfo);
+//            }
+//            return result;
+//        }
+
+//        internal override IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>> SetterValueFactory(Type type) {
+//            bool hasDataContract = ReflectionUtils.GetAttribute(type, typeof(DataContractAttribute)) != null;
+//            if (!hasDataContract)
+//                return base.SetterValueFactory(type);
+//            string jsonKey;
+//            IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>> result = new Dictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>>();
+//            foreach (PropertyInfo propertyInfo in ReflectionUtils.GetProperties(type)) {
+//                if (propertyInfo.CanWrite) {
+//                    MethodInfo setMethod = ReflectionUtils.GetSetterMethodInfo(propertyInfo);
+//                    if (!setMethod.IsStatic && CanAdd(propertyInfo, out jsonKey))
+//                        result[jsonKey] = new KeyValuePair<Type, ReflectionUtils.SetDelegate>(propertyInfo.PropertyType, ReflectionUtils.GetSetMethod(propertyInfo));
+//                }
+//            }
+//            foreach (FieldInfo fieldInfo in ReflectionUtils.GetFields(type)) {
+//                if (!fieldInfo.IsInitOnly && !fieldInfo.IsStatic && CanAdd(fieldInfo, out jsonKey))
+//                    result[jsonKey] = new KeyValuePair<Type, ReflectionUtils.SetDelegate>(fieldInfo.FieldType, ReflectionUtils.GetSetMethod(fieldInfo));
+//            }
+//            // todo implement sorting for DATACONTRACT.
+//            return result;
+//        }
+
+//        private static bool CanAdd(MemberInfo info, out string jsonKey) {
+//            jsonKey = null;
+//            if (ReflectionUtils.GetAttribute(info, typeof(IgnoreDataMemberAttribute)) != null)
+//                return false;
+//            DataMemberAttribute dataMemberAttribute = (DataMemberAttribute)ReflectionUtils.GetAttribute(info, typeof(DataMemberAttribute));
+//            if (dataMemberAttribute == null)
+//                return false;
+//            jsonKey = string.IsNullOrEmpty(dataMemberAttribute.Name) ? info.Name : dataMemberAttribute.Name;
+//            return true;
+//        }
+//    }
+
+#endif
+
+    [GeneratedCode("simple-json","1.0.0")]
 #if SIMPLE_JSON_INTERNAL
     internal
 #else
     public
 #endif
- class DataContractJsonSerializerStrategy : PocoJsonSerializerStrategy
+        class DefaultJsonSerializationStrategy : PocoJsonSerializerStrategy
     {
-        public DataContractJsonSerializerStrategy()
+        private bool toLowerCase = false;
+        //private bool onlyPublic = true;
+        internal DefaultJsonSerializationStrategy() :
+#if SIMPLE_JSON_PropertyToLowerCase&&SIMPLE_JSON_OnlyPublicProperty
+            this(true,true)
+#elif SIMPLE_JSON_PropertyToLowerCase && !SIMPLE_JSON_OnlyPublicProperty
+            this(true,false)
+        
+#elif !SIMPLE_JSON_PropertyToLowerCase && !SIMPLE_JSON_OnlyPublicProperty
+            this(false,false)
+#else
+            this(false,true)
+#endif
         {
-            GetCache = new ReflectionUtils.ThreadSafeDictionary<Type, IDictionary<string, ReflectionUtils.GetDelegate>>(GetterValueFactory);
-            SetCache = new ReflectionUtils.ThreadSafeDictionary<Type, IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>>>(SetterValueFactory);
         }
-
-        internal override IDictionary<string, ReflectionUtils.GetDelegate> GetterValueFactory(Type type)
+        public DefaultJsonSerializationStrategy(bool toLowerCase,bool onlyPublic)
         {
-            bool hasDataContract = ReflectionUtils.GetAttribute(type, typeof(DataContractAttribute)) != null;
-            if (!hasDataContract)
-                return base.GetterValueFactory(type);
-            string jsonKey;
-            IDictionary<string, ReflectionUtils.GetDelegate> result = new Dictionary<string, ReflectionUtils.GetDelegate>();
-            foreach (PropertyInfo propertyInfo in ReflectionUtils.GetProperties(type))
-            {
-                if (propertyInfo.CanRead)
-                {
-                    MethodInfo getMethod = ReflectionUtils.GetGetterMethodInfo(propertyInfo);
-                    if (!getMethod.IsStatic && CanAdd(propertyInfo, out jsonKey))
-                        result[jsonKey] = ReflectionUtils.GetGetMethod(propertyInfo);
+            this.toLowerCase = toLowerCase;
+            this.onlyPublic = onlyPublic;
+            //sgd:support DataContractAttribute/IgnoreDataMemberAttribute/DataMemberAttribute֧
+
+#if SIMPLE_JSON_DATACONTRACT
+                GetCache = new ReflectionUtils.ThreadSafeDictionary<Type, IDictionary<string, ReflectionUtils.GetDelegate>>(GetterValueFactory);
+                SetCache = new ReflectionUtils.ThreadSafeDictionary<Type, IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>>>(SetterValueFactory);
+#endif
+        }
+        #region DataContractAttribute/IgnoreDataMemberAttribute/DataMemberAttribute֧
+
+#if SIMPLE_JSON_DATACONTRACT
+            internal override IDictionary<string, ReflectionUtils.GetDelegate> GetterValueFactory(Type type) {
+                bool hasDataContract = ReflectionUtils.GetAttribute(type, typeof(DataContractAttribute)) != null;
+                if(!hasDataContract)
+                    return base.GetterValueFactory(type);
+                string jsonKey;
+                IDictionary<string, ReflectionUtils.GetDelegate> result = new Dictionary<string, ReflectionUtils.GetDelegate>();
+                foreach(PropertyInfo propertyInfo in ReflectionUtils.GetProperties(type)) {
+                    if(propertyInfo.CanRead) {
+                        MethodInfo getMethod = ReflectionUtils.GetGetterMethodInfo(propertyInfo);
+                        if(!getMethod.IsStatic && CanAdd(propertyInfo, out jsonKey))
+                            result[jsonKey] = ReflectionUtils.GetGetMethod(propertyInfo);
+                    }
                 }
-            }
-            foreach (FieldInfo fieldInfo in ReflectionUtils.GetFields(type))
-            {
-                if (!fieldInfo.IsStatic && CanAdd(fieldInfo, out jsonKey))
-                    result[jsonKey] = ReflectionUtils.GetGetMethod(fieldInfo);
-            }
-            return result;
-        }
-
-        internal override IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>> SetterValueFactory(Type type)
-        {
-            bool hasDataContract = ReflectionUtils.GetAttribute(type, typeof(DataContractAttribute)) != null;
-            if (!hasDataContract)
-                return base.SetterValueFactory(type);
-            string jsonKey;
-            IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>> result = new Dictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>>();
-            foreach (PropertyInfo propertyInfo in ReflectionUtils.GetProperties(type))
-            {
-                if (propertyInfo.CanWrite)
-                {
-                    MethodInfo setMethod = ReflectionUtils.GetSetterMethodInfo(propertyInfo);
-                    if (!setMethod.IsStatic && CanAdd(propertyInfo, out jsonKey))
-                        result[jsonKey] = new KeyValuePair<Type, ReflectionUtils.SetDelegate>(propertyInfo.PropertyType, ReflectionUtils.GetSetMethod(propertyInfo));
+                foreach(FieldInfo fieldInfo in ReflectionUtils.GetFields(type)) {
+                    if(!fieldInfo.IsStatic && CanAdd(fieldInfo, out jsonKey))
+                        result[jsonKey] = ReflectionUtils.GetGetMethod(fieldInfo);
                 }
+                return result;
             }
-            foreach (FieldInfo fieldInfo in ReflectionUtils.GetFields(type))
-            {
-                if (!fieldInfo.IsInitOnly && !fieldInfo.IsStatic && CanAdd(fieldInfo, out jsonKey))
-                    result[jsonKey] = new KeyValuePair<Type, ReflectionUtils.SetDelegate>(fieldInfo.FieldType, ReflectionUtils.GetSetMethod(fieldInfo));
-            }
-            // todo implement sorting for DATACONTRACT.
-            return result;
-        }
 
-        private static bool CanAdd(MemberInfo info, out string jsonKey)
+            internal override IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>> SetterValueFactory(Type type) {
+                bool hasDataContract = ReflectionUtils.GetAttribute(type, typeof(DataContractAttribute)) != null;
+                if(!hasDataContract)
+                    return base.SetterValueFactory(type);
+                string jsonKey;
+                IDictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>> result = new Dictionary<string, KeyValuePair<Type, ReflectionUtils.SetDelegate>>();
+                foreach(PropertyInfo propertyInfo in ReflectionUtils.GetProperties(type)) {
+                    if(propertyInfo.CanWrite) {
+                        MethodInfo setMethod = ReflectionUtils.GetSetterMethodInfo(propertyInfo);
+                        if(!setMethod.IsStatic && CanAdd(propertyInfo, out jsonKey))
+                            result[jsonKey] = new KeyValuePair<Type, ReflectionUtils.SetDelegate>(propertyInfo.PropertyType, ReflectionUtils.GetSetMethod(propertyInfo));
+                    }
+                }
+                foreach(FieldInfo fieldInfo in ReflectionUtils.GetFields(type)) {
+                    if(!fieldInfo.IsInitOnly && !fieldInfo.IsStatic && CanAdd(fieldInfo, out jsonKey))
+                        result[jsonKey] = new KeyValuePair<Type, ReflectionUtils.SetDelegate>(fieldInfo.FieldType, ReflectionUtils.GetSetMethod(fieldInfo));
+                }
+                // todo implement sorting for DATACONTRACT.
+                return result;
+            }
+
+            private static bool CanAdd(MemberInfo info, out string jsonKey) {
+                jsonKey = null;
+                if(ReflectionUtils.GetAttribute(info, typeof(IgnoreDataMemberAttribute)) != null)
+                    return false;
+                DataMemberAttribute dataMemberAttribute = (DataMemberAttribute)ReflectionUtils.GetAttribute(info, typeof(DataMemberAttribute));
+                if(dataMemberAttribute == null)
+                    return false;
+                jsonKey = string.IsNullOrEmpty(dataMemberAttribute.Name) ? info.Name : dataMemberAttribute.Name;
+                return true;
+            }
+#endif
+        #endregion
+        //protected override bool CanAddField(FieldInfo field) {
+        //    var canAdd = base.CanAddField(field);
+        //    return canAdd && ((onlyPublic && field.IsPublic) || !onlyPublic);
+        //}
+
+        //protected override bool CanAddProperty(PropertyInfo property, MethodInfo method) {
+        //    var canAdd = base.CanAddProperty(property, method);
+        //    if(!canAdd)
+        //        return false;
+
+        //    // we always serialize public things
+        //    if(method.IsPublic)
+        //        return true;
+
+        //    // if the getter is private and we're only serializing public things, skip this property
+        //    if(onlyPublic && method.Name.StartsWith("get_"))
+        //        return false;
+
+        //    return true;
+        //}
+
+        protected override string MapClrMemberNameToJsonFieldName(string clrPropertyName)
         {
-            jsonKey = null;
-            if (ReflectionUtils.GetAttribute(info, typeof(IgnoreDataMemberAttribute)) != null)
-                return false;
-            DataMemberAttribute dataMemberAttribute = (DataMemberAttribute)ReflectionUtils.GetAttribute(info, typeof(DataMemberAttribute));
-            if (dataMemberAttribute == null)
-                return false;
-            jsonKey = string.IsNullOrEmpty(dataMemberAttribute.Name) ? info.Name : dataMemberAttribute.Name;
-            return true;
+            if (!toLowerCase)
+                return base.MapClrMemberNameToJsonFieldName(clrPropertyName);
+            return ToJsonPropertyName(clrPropertyName);
+        }
+        /// <summary>
+        /// Convert from PascalCase to camelCase.
+        /// </summary>
+        private string ToJsonPropertyName(string propertyName)
+        {
+            Guard.ArgumentNotNullOrWhiteSpace(propertyName,"propertyName");
+            int i = 0;
+            while (i < propertyName.Length && char.IsUpper(propertyName[i]))
+                i++;
+            return propertyName.Substring(0,i).ToLowerInvariant() + propertyName.Substring(i);
         }
     }
 
+#if SIMPLE_JSON_UNITY
+    [GeneratedCode("simple-json","1.0.0")]
+#if SIMPLE_JSON_INTERNAL
+    internal
+#else
+    public
+#endif
+    class UnitySerializationStrategy : PocoJsonSerializerStrategy
+    {
+        private bool toLowerCase = false;
+        //private bool onlyPublic = true;
+
+        internal UnitySerializationStrategy() :
+#if SIMPLE_JSON_PropertyToLowerCase&&SIMPLE_JSON_OnlyPublicProperty
+            this(true,true)
+#elif SIMPLE_JSON_PropertyToLowerCase && !SIMPLE_JSON_OnlyPublicProperty
+            this(true,false)
+        
+#elif !SIMPLE_JSON_PropertyToLowerCase && !SIMPLE_JSON_OnlyPublicProperty
+            this(false,false)
+#else
+            this(false,true)
+#endif
+        {
+        }
+        public UnitySerializationStrategy(bool toLowerCase,bool onlyPublic) {
+            this.toLowerCase = toLowerCase;
+            this.onlyPublic = onlyPublic;
+        }
+
+        protected override bool TrySerializeKnownTypes(object input,out object output) {
+            //support Unity.Mathematics               
+            if (input.GetType().FullName.StartsWith("UnityEngine") ||
+                input.GetType().FullName.StartsWith("Unity.")) {
+                output = JsonUtility.ToJson(input);
+                return true;
+            }
+            return base.TrySerializeKnownTypes(input,out output);
+        }
+        public override object DeserializeObject(object value,Type type) {
+            string str = value as string;
+            // BUG FIX: 原代码运算符优先级错误，&& 优先于 ||，导致条件等同于：
+            // (!string.IsNullOrEmpty(str) && type.FullName.StartsWith("UnityEngine")) || type.FullName.StartsWith("Unity.")
+            // 当 type 以 "Unity." 开头时，无论 value 是否为字符串，都会调用 JsonUtility.FromJson(str, type)，
+            // 此时 str 可能为 null，导致 JsonUtility.FromJson 抛出异常或返回错误结果。
+            if ((type.FullName.StartsWith("UnityEngine") ||
+                 type.FullName.StartsWith("Unity.")) &&
+                !string.IsNullOrEmpty(str)) {
+                return JsonUtility.FromJson(str,type);
+            }
+            return base.DeserializeObject(value,type);
+        }
+        protected override string MapClrMemberNameToJsonFieldName(string clrPropertyName) {
+            if (!toLowerCase)
+                return base.MapClrMemberNameToJsonFieldName(clrPropertyName);
+            return ToJsonPropertyName(clrPropertyName);
+        }
+        /// <summary>
+        /// Convert from PascalCase to camelCase.
+        /// </summary>
+        private string ToJsonPropertyName(string propertyName) {
+            Guard.ArgumentNotNullOrWhiteSpace(propertyName,"propertyName");
+            int i = 0;
+            while (i < propertyName.Length && char.IsUpper(propertyName[i]))
+                i++;
+            return propertyName.Substring(0,i).ToLowerInvariant() + propertyName.Substring(i);
+        }
+    }
 #endif
 
-    namespace Reflection
-    {
-        // This class is meant to be copied into other libraries. So we want to exclude it from Code Analysis rules
-        // that might be in place in the target project.
-        [GeneratedCode("reflection-utils", "1.0.0")]
+
+
+    // This class is meant to be copied into other libraries. So we want to exclude it from Code Analysis rules
+    // that might be in place in the target project.
+    [GeneratedCode("reflection-utils","1.0.0")]
 #if SIMPLE_JSON_REFLECTION_UTILS_PUBLIC
         public
 #else
-        internal
+    internal
 #endif
- class ReflectionUtils
-        {
-            private static readonly object[] EmptyObjects = new object[] { };
+    class ReflectionUtils
+    {
+        private static readonly object[] EmptyObjects = new object[] { };
 
-            public delegate object GetDelegate(object source);
-            public delegate void SetDelegate(object source, object value);
-            public delegate object ConstructorDelegate(params object[] args);
+        public delegate object GetDelegate(object source);
+        public delegate void SetDelegate(object source,object value);
+        public delegate object ConstructorDelegate(params object[] args);
 
-            public delegate TValue ThreadSafeDictionaryValueFactory<TKey, TValue>(TKey key);
+        public delegate TValue ThreadSafeDictionaryValueFactory<TKey, TValue>(TKey key);
 
 #if SIMPLE_JSON_TYPEINFO
             public static TypeInfo GetTypeInfo(Type type)
@@ -1700,126 +2378,130 @@ namespace Octokit
                 return type.GetTypeInfo();
             }
 #else
-            public static Type GetTypeInfo(Type type)
-            {
-                return type;
-            }
+        public static Type GetTypeInfo(Type type)
+        {
+            return type;
+        }
 #endif
 
-            public static Attribute GetAttribute(MemberInfo info, Type type)
-            {
+        public static Attribute GetAttribute(MemberInfo info,Type type)
+        {
 #if SIMPLE_JSON_TYPEINFO
                 if (info == null || type == null || !info.IsDefined(type))
                     return null;
                 return info.GetCustomAttribute(type);
 #else
-                if (info == null || type == null || !Attribute.IsDefined(info, type))
-                    return null;
-                return Attribute.GetCustomAttribute(info, type);
+            if (info == null || type == null || !Attribute.IsDefined(info,type))
+                return null;
+            return Attribute.GetCustomAttribute(info,type);
 #endif
-            }
+        }
 
-            public static Type GetGenericListElementType(Type type)
-            {
-                IEnumerable<Type> interfaces;
+        public static Type GetGenericListElementType(Type type)
+        {
+            IEnumerable<Type> interfaces;
 #if SIMPLE_JSON_TYPEINFO
                 interfaces = type.GetTypeInfo().ImplementedInterfaces;
 #else
-                interfaces = type.GetInterfaces();
+            interfaces = type.GetInterfaces();
 #endif
-                foreach (Type implementedInterface in interfaces)
-                {
-                    if (IsTypeGeneric(implementedInterface) &&
-                        implementedInterface.GetGenericTypeDefinition() == typeof(IList<>))
-                    {
-                        return GetGenericTypeArguments(implementedInterface)[0];
-                    }
-                }
-                return GetGenericTypeArguments(type)[0];
-            }
-
-            public static Attribute GetAttribute(Type objectType, Type attributeType)
+            foreach (Type implementedInterface in interfaces)
             {
+                if (IsTypeGeneric(implementedInterface) &&
+                    implementedInterface.GetGenericTypeDefinition() == typeof(IList<>))
+                {
+                    return GetGenericTypeArguments(implementedInterface)[0];
+                }
+            }
+            return GetGenericTypeArguments(type)[0];
+        }
+
+        public static Attribute GetAttribute(Type objectType,Type attributeType)
+        {
+
 #if SIMPLE_JSON_TYPEINFO
                 if (objectType == null || attributeType == null || !objectType.GetTypeInfo().IsDefined(attributeType))
                     return null;
                 return objectType.GetTypeInfo().GetCustomAttribute(attributeType);
 #else
-                if (objectType == null || attributeType == null || !Attribute.IsDefined(objectType, attributeType))
-                    return null;
-                return Attribute.GetCustomAttribute(objectType, attributeType);
+            if (objectType == null || attributeType == null || !Attribute.IsDefined(objectType,attributeType))
+                return null;
+            return Attribute.GetCustomAttribute(objectType,attributeType);
 #endif
-            }
+        }
 
-            public static Type[] GetGenericTypeArguments(Type type)
-            {
+        public static Type[] GetGenericTypeArguments(Type type)
+        {
 #if SIMPLE_JSON_TYPEINFO
                 return type.GetTypeInfo().GenericTypeArguments;
 #else
-                return type.GetGenericArguments();
+            return type.GetGenericArguments();
 #endif
-            }
+        }
 
-            public static bool IsTypeGeneric(Type type)
-            {
-                return GetTypeInfo(type).IsGenericType;
-            }
+        public static bool IsTypeGeneric(Type type)
+        {
+            return GetTypeInfo(type).IsGenericType;
+        }
 
-            public static bool IsTypeGenericeCollectionInterface(Type type)
-            {
-                if (!IsTypeGeneric(type))
-                    return false;
+        public static bool IsTypeGenericeCollectionInterface(Type type)
+        {
+            if (!IsTypeGeneric(type))
+                return false;
 
-                Type genericDefinition = type.GetGenericTypeDefinition();
+            Type genericDefinition = type.GetGenericTypeDefinition();
 
-                return (genericDefinition == typeof(IList<>)
-                    || genericDefinition == typeof(ICollection<>)
-                    || genericDefinition == typeof(IEnumerable<>)
+            return (genericDefinition == typeof(IList<>)
+                || genericDefinition == typeof(ICollection<>)
+                || genericDefinition == typeof(IEnumerable<>)
 #if SIMPLE_JSON_READONLY_COLLECTIONS
                     || genericDefinition == typeof(IReadOnlyCollection<>)
                     || genericDefinition == typeof(IReadOnlyList<>)
 #endif
                     );
-            }
+        }
 
-            public static bool IsAssignableFrom(Type type1, Type type2)
-            {
-                return GetTypeInfo(type1).IsAssignableFrom(GetTypeInfo(type2));
-            }
+        public static bool IsAssignableFrom(Type type1,Type type2)
+        {
+            return GetTypeInfo(type1).IsAssignableFrom(GetTypeInfo(type2));
+        }
 
-            public static bool IsStringEnumWrapper(Type type)
-            {
-                var typeInfo = ReflectionUtils.GetTypeInfo(type);
-                if (typeInfo.IsGenericType)
-                {
-                    var typeDefinition = typeInfo.GetGenericTypeDefinition();
-
-                    return typeof(StringEnum<>).IsAssignableFrom(typeDefinition);
-                }
-                return false;
-            }
-
-            public static IEnumerable<Type> GetInterfaces(Type type)
-            {
+        public static bool IsTypeDictionary(Type type)
+        {
 #if SIMPLE_JSON_TYPEINFO
-                return type.GetTypeInfo().ImplementedInterfaces;
+                if (typeof(IDictionary<,>).GetTypeInfo().IsAssignableFrom(type.GetTypeInfo()))
+                    return true;
 #else
-                return type.GetInterfaces();
+            if (typeof(System.Collections.IDictionary).IsAssignableFrom(type))
+                return true;
 #endif
+            if (!GetTypeInfo(type).IsGenericType)
+                return false;
+
+            if (GetTypeInfo(type).IsInterface)
+            {
+                Type interfaceDefinition = GetTypeInfo(type).GetGenericTypeDefinition();
+                if (interfaceDefinition == typeof(IDictionary<,>)
+#if SIMPLE_JSON_READONLY_COLLECTIONS
+                    || interfaceDefinition == typeof(IReadOnlyDictionary<,>)
+#endif
+                )
+                {
+                    return true;
+                }
             }
 
-            public static bool IsTypeDictionary(Type type)
-            {
-#if !SIMPLE_JSON_TYPEINFO
-                if (typeof(System.Collections.IDictionary).IsAssignableFrom(type))
-                    return true;
+            IEnumerable<Type> interfaces;
+#if SIMPLE_JSON_TYPEINFO
+                interfaces = type.GetTypeInfo().ImplementedInterfaces;
+#else
+            interfaces = type.GetInterfaces();
 #endif
-                if (!IsTypeGeneric(type))
-                    return false;
-
-                if (GetTypeInfo(type).IsInterface)
+            foreach (Type i in interfaces)
+            {
+                if (IsTypeGeneric(i))
                 {
-                    var interfaceDefinition = GetTypeInfo(type).GetGenericTypeDefinition();
+                    Type interfaceDefinition = GetTypeInfo(i).GetGenericTypeDefinition();
                     if (interfaceDefinition == typeof(IDictionary<,>)
 #if SIMPLE_JSON_READONLY_COLLECTIONS
                         || interfaceDefinition == typeof(IReadOnlyDictionary<,>)
@@ -1829,144 +2511,144 @@ namespace Octokit
                         return true;
                     }
                 }
-
-                var interfaces = GetInterfaces(type);
-                foreach (var i in interfaces)
-                {
-                    if (IsTypeGeneric(i))
-                    {
-                        var interfaceDefinition = GetTypeInfo(i).GetGenericTypeDefinition();
-                        if (interfaceDefinition == typeof(IDictionary<,>)
-#if SIMPLE_JSON_READONLY_COLLECTIONS
-                            || interfaceDefinition == typeof(IReadOnlyDictionary<,>)
-#endif
-                        )
-                        {
-                            return true;
-                        }
-                    }
-                }
-
-                return false;
             }
 
-            public static bool IsNullableType(Type type)
-            {
-                return GetTypeInfo(type).IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>);
-            }
+            return false;
+        }
 
-            public static object ToNullableType(object obj, Type nullableType)
-            {
-                return obj == null ? null : Convert.ChangeType(obj, Nullable.GetUnderlyingType(nullableType), CultureInfo.InvariantCulture);
-            }
+        public static bool IsNullableType(Type type)
+        {
+            return GetTypeInfo(type).IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>);
+        }
 
-            public static bool IsValueType(Type type)
-            {
-                return GetTypeInfo(type).IsValueType;
-            }
+        public static object ToNullableType(object obj,Type nullableType)
+        {
+            return obj == null ? null : Convert.ChangeType(obj,Nullable.GetUnderlyingType(nullableType),CultureInfo.InvariantCulture);
+        }
 
-            public static IEnumerable<ConstructorInfo> GetConstructors(Type type)
-            {
+        public static bool IsValueType(Type type)
+        {
+            return GetTypeInfo(type).IsValueType;
+        }
+
+        public static IEnumerable<ConstructorInfo> GetConstructors(Type type)
+        {
 #if SIMPLE_JSON_TYPEINFO
                 return type.GetTypeInfo().DeclaredConstructors;
 #else
-                return type.GetConstructors();
+            return type.GetConstructors();
 #endif
-            }
+        }
 
-            public static ConstructorInfo GetConstructorInfo(Type type, params Type[] argsType)
+        public static ConstructorInfo GetConstructorInfo(Type type,params Type[] argsType)
+        {
+            IEnumerable<ConstructorInfo> constructorInfos = GetConstructors(type);
+            int i;
+            bool matches;
+            foreach (ConstructorInfo constructorInfo in constructorInfos)
             {
-                IEnumerable<ConstructorInfo> constructorInfos = GetConstructors(type);
-                int i;
-                bool matches;
-                foreach (ConstructorInfo constructorInfo in constructorInfos)
+                ParameterInfo[] parameters = constructorInfo.GetParameters();
+                if (argsType.Length != parameters.Length)
+                    continue;
+
+                i = 0;
+                matches = true;
+                foreach (ParameterInfo parameterInfo in constructorInfo.GetParameters())
                 {
-                    ParameterInfo[] parameters = constructorInfo.GetParameters();
-                    if (argsType.Length != parameters.Length)
-                        continue;
-
-                    i = 0;
-                    matches = true;
-                    foreach (ParameterInfo parameterInfo in constructorInfo.GetParameters())
+                    if (parameterInfo.ParameterType != argsType[i])
                     {
-                        if (parameterInfo.ParameterType != argsType[i])
-                        {
-                            matches = false;
-                            break;
-                        }
+                        matches = false;
+                        break;
                     }
-
-                    if (matches)
-                        return constructorInfo;
                 }
 
-                return null;
+                if (matches)
+                    return constructorInfo;
             }
 
-            public static IEnumerable<PropertyInfo> GetProperties(Type type)
-            {
+            return null;
+        }
+
+        public static IEnumerable<PropertyInfo> GetProperties(Type type)
+        {
 #if SIMPLE_JSON_TYPEINFO
                 return type.GetRuntimeProperties();
 #else
-                return type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            return type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
 #endif
-            }
+        }
 
-            public static IEnumerable<FieldInfo> GetFields(Type type)
-            {
+        public static IEnumerable<FieldInfo> GetFields(Type type)
+        {
 #if SIMPLE_JSON_TYPEINFO
                 return type.GetRuntimeFields();
 #else
-                return type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            return type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
 #endif
-            }
+        }
 
-            public static MethodInfo GetGetterMethodInfo(PropertyInfo propertyInfo)
-            {
+        public static MethodInfo GetGetterMethodInfo(PropertyInfo propertyInfo)
+        {
 #if SIMPLE_JSON_TYPEINFO
                 return propertyInfo.GetMethod;
 #else
-                return propertyInfo.GetGetMethod(true);
+            return propertyInfo.GetGetMethod(true);
 #endif
-            }
+        }
 
-            public static MethodInfo GetSetterMethodInfo(PropertyInfo propertyInfo)
-            {
+        public static MethodInfo GetSetterMethodInfo(PropertyInfo propertyInfo)
+        {
 #if SIMPLE_JSON_TYPEINFO
                 return propertyInfo.SetMethod;
 #else
-                return propertyInfo.GetSetMethod(true);
+            return propertyInfo.GetSetMethod(true);
 #endif
-            }
+        }
 
-            public static ConstructorDelegate GetContructor(ConstructorInfo constructorInfo)
-            {
+        public static ConstructorDelegate GetContructor(ConstructorInfo constructorInfo)
+        {
 #if SIMPLE_JSON_NO_LINQ_EXPRESSION
-                return GetConstructorByReflection(constructorInfo);
+            return GetConstructorByReflection(constructorInfo);
 #else
                 return GetConstructorByExpression(constructorInfo);
 #endif
-            }
+        }
 
-            public static ConstructorDelegate GetContructor(Type type, params Type[] argsType)
-            {
+        public static ConstructorDelegate GetContructor(Type type,params Type[] argsType)
+        {
 #if SIMPLE_JSON_NO_LINQ_EXPRESSION
-                return GetConstructorByReflection(type, argsType);
+            return GetConstructorByReflection(type,argsType);
 #else
                 return GetConstructorByExpression(type, argsType);
 #endif
-            }
+        }
 
-            public static ConstructorDelegate GetConstructorByReflection(ConstructorInfo constructorInfo)
-            {
-                return delegate (object[] args) { return constructorInfo.Invoke(args); };
-            }
+        public static ConstructorDelegate GetConstructorByReflection(ConstructorInfo constructorInfo)
+        {
+            return delegate (object[] args) { return constructorInfo.Invoke(args); };
+        }
 
-            public static ConstructorDelegate GetConstructorByReflection(Type type, params Type[] argsType)
-            {
-                ConstructorInfo constructorInfo = GetConstructorInfo(type, argsType);
-                return constructorInfo == null ? null : GetConstructorByReflection(constructorInfo);
-            }
+        public static ConstructorDelegate GetConstructorByReflection(Type type,params Type[] argsType)
+        {
+            ConstructorInfo constructorInfo = GetConstructorInfo(type,argsType);
+            // if it's a value type (i.e., struct), it won't have a default constructor, so use Activator instead
+            return constructorInfo == null ? (type.IsValueType ? GetConstructorForValueType(type) : null) : GetConstructorByReflection(constructorInfo);
+        }
+
+        static ConstructorDelegate GetConstructorForValueType(Type type)
+        {
+            return delegate (object[] args) {
+#if UNITY_EDITOR || !AOT
+                return Activator.CreateInstance(type);
+#else
+                try {
+                    return Activator.CreateInstance(type);
+                } catch {
+                    return FormatterServices.GetUninitializedObject(type);
+                }
+#endif
+            };
+        }
 
 #if !SIMPLE_JSON_NO_LINQ_EXPRESSION
 
@@ -1986,45 +2668,46 @@ namespace Octokit
                 NewExpression newExp = Expression.New(constructorInfo, argsExp);
                 Expression<Func<object[], object>> lambda = Expression.Lambda<Func<object[], object>>(newExp, param);
                 Func<object[], object> compiledLambda = lambda.Compile();
-                return delegate (object[] args) { return compiledLambda(args); };
+                return delegate(object[] args) { return compiledLambda(args); };
             }
 
             public static ConstructorDelegate GetConstructorByExpression(Type type, params Type[] argsType)
             {
                 ConstructorInfo constructorInfo = GetConstructorInfo(type, argsType);
-                return constructorInfo == null ? null : GetConstructorByExpression(constructorInfo);
+                // if it's a value type (i.e., struct), it won't have a default constructor, so use Activator instead
+                return constructorInfo == null ? (type.IsValueType ? GetConstructorForValueType(type) : null) : GetConstructorByExpression(constructorInfo);
             }
 
 #endif
 
-            public static GetDelegate GetGetMethod(PropertyInfo propertyInfo)
-            {
+        public static GetDelegate GetGetMethod(PropertyInfo propertyInfo)
+        {
 #if SIMPLE_JSON_NO_LINQ_EXPRESSION
-                return GetGetMethodByReflection(propertyInfo);
+            return GetGetMethodByReflection(propertyInfo);
 #else
                 return GetGetMethodByExpression(propertyInfo);
 #endif
-            }
+        }
 
-            public static GetDelegate GetGetMethod(FieldInfo fieldInfo)
-            {
+        public static GetDelegate GetGetMethod(FieldInfo fieldInfo)
+        {
 #if SIMPLE_JSON_NO_LINQ_EXPRESSION
-                return GetGetMethodByReflection(fieldInfo);
+            return GetGetMethodByReflection(fieldInfo);
 #else
                 return GetGetMethodByExpression(fieldInfo);
 #endif
-            }
+        }
 
-            public static GetDelegate GetGetMethodByReflection(PropertyInfo propertyInfo)
-            {
-                MethodInfo methodInfo = GetGetterMethodInfo(propertyInfo);
-                return delegate (object source) { return methodInfo.Invoke(source, EmptyObjects); };
-            }
+        public static GetDelegate GetGetMethodByReflection(PropertyInfo propertyInfo)
+        {
+            MethodInfo methodInfo = GetGetterMethodInfo(propertyInfo);
+            return delegate (object source) { return methodInfo.Invoke(source,EmptyObjects); };
+        }
 
-            public static GetDelegate GetGetMethodByReflection(FieldInfo fieldInfo)
-            {
-                return delegate (object source) { return fieldInfo.GetValue(source); };
-            }
+        public static GetDelegate GetGetMethodByReflection(FieldInfo fieldInfo)
+        {
+            return delegate (object source) { return fieldInfo.GetValue(source); };
+        }
 
 #if !SIMPLE_JSON_NO_LINQ_EXPRESSION
 
@@ -2034,7 +2717,7 @@ namespace Octokit
                 ParameterExpression instance = Expression.Parameter(typeof(object), "instance");
                 UnaryExpression instanceCast = (!IsValueType(propertyInfo.DeclaringType)) ? Expression.TypeAs(instance, propertyInfo.DeclaringType) : Expression.Convert(instance, propertyInfo.DeclaringType);
                 Func<object, object> compiled = Expression.Lambda<Func<object, object>>(Expression.TypeAs(Expression.Call(instanceCast, getMethodInfo), typeof(object)), instance).Compile();
-                return delegate (object source) { return compiled(source); };
+                return delegate(object source) { return compiled(source); };
             }
 
             public static GetDelegate GetGetMethodByExpression(FieldInfo fieldInfo)
@@ -2042,39 +2725,45 @@ namespace Octokit
                 ParameterExpression instance = Expression.Parameter(typeof(object), "instance");
                 MemberExpression member = Expression.Field(Expression.Convert(instance, fieldInfo.DeclaringType), fieldInfo);
                 GetDelegate compiled = Expression.Lambda<GetDelegate>(Expression.Convert(member, typeof(object)), instance).Compile();
-                return delegate (object source) { return compiled(source); };
+                return delegate(object source) { return compiled(source); };
             }
 
 #endif
 
-            public static SetDelegate GetSetMethod(PropertyInfo propertyInfo)
-            {
+        public static SetDelegate GetSetMethod(PropertyInfo propertyInfo)
+        {
 #if SIMPLE_JSON_NO_LINQ_EXPRESSION
-                return GetSetMethodByReflection(propertyInfo);
+            return GetSetMethodByReflection(propertyInfo);
 #else
+                // if it's a struct, we want to use reflection, as linq expressions modify copies of the object and not the real thing
+                if (propertyInfo.DeclaringType.IsValueType)
+                    return GetSetMethodByReflection(propertyInfo);
                 return GetSetMethodByExpression(propertyInfo);
 #endif
-            }
+        }
 
-            public static SetDelegate GetSetMethod(FieldInfo fieldInfo)
-            {
+        public static SetDelegate GetSetMethod(FieldInfo fieldInfo)
+        {
 #if SIMPLE_JSON_NO_LINQ_EXPRESSION
-                return GetSetMethodByReflection(fieldInfo);
+            return GetSetMethodByReflection(fieldInfo);
 #else
+                // if it's a struct, we want to use reflection, as linq expressions modify copies of the object and not the real thing
+                if (fieldInfo.DeclaringType.IsValueType)
+                    return GetSetMethodByReflection(fieldInfo);
                 return GetSetMethodByExpression(fieldInfo);
 #endif
-            }
+        }
 
-            public static SetDelegate GetSetMethodByReflection(PropertyInfo propertyInfo)
-            {
-                MethodInfo methodInfo = GetSetterMethodInfo(propertyInfo);
-                return delegate (object source, object value) { methodInfo.Invoke(source, new object[] { value }); };
-            }
+        public static SetDelegate GetSetMethodByReflection(PropertyInfo propertyInfo)
+        {
+            MethodInfo methodInfo = GetSetterMethodInfo(propertyInfo);
+            return delegate (object source,object value) { methodInfo.Invoke(source,new object[] { value }); };
+        }
 
-            public static SetDelegate GetSetMethodByReflection(FieldInfo fieldInfo)
-            {
-                return delegate (object source, object value) { fieldInfo.SetValue(source, value); };
-            }
+        public static SetDelegate GetSetMethodByReflection(FieldInfo fieldInfo)
+        {
+            return delegate (object source,object value) { fieldInfo.SetValue(source,value); };
+        }
 
 #if !SIMPLE_JSON_NO_LINQ_EXPRESSION
 
@@ -2086,7 +2775,7 @@ namespace Octokit
                 UnaryExpression instanceCast = (!IsValueType(propertyInfo.DeclaringType)) ? Expression.TypeAs(instance, propertyInfo.DeclaringType) : Expression.Convert(instance, propertyInfo.DeclaringType);
                 UnaryExpression valueCast = (!IsValueType(propertyInfo.PropertyType)) ? Expression.TypeAs(value, propertyInfo.PropertyType) : Expression.Convert(value, propertyInfo.PropertyType);
                 Action<object, object> compiled = Expression.Lambda<Action<object, object>>(Expression.Call(instanceCast, setMethodInfo, valueCast), new ParameterExpression[] { instance, value }).Compile();
-                return delegate (object source, object val) { compiled(source, val); };
+                return delegate(object source, object val) { compiled(source, val); };
             }
 
             public static SetDelegate GetSetMethodByExpression(FieldInfo fieldInfo)
@@ -2095,7 +2784,7 @@ namespace Octokit
                 ParameterExpression value = Expression.Parameter(typeof(object), "value");
                 Action<object, object> compiled = Expression.Lambda<Action<object, object>>(
                     Assign(Expression.Field(Expression.Convert(instance, fieldInfo.DeclaringType), fieldInfo), Expression.Convert(value, fieldInfo.FieldType)), instance, value).Compile();
-                return delegate (object source, object val) { compiled(source, val); };
+                return delegate(object source, object val) { compiled(source, val); };
             }
 
             public static BinaryExpression Assign(Expression left, Expression right)
@@ -2119,134 +2808,250 @@ namespace Octokit
 
 #endif
 
-            public sealed class ThreadSafeDictionary<TKey, TValue> : IDictionary<TKey, TValue>
+        public sealed class ThreadSafeDictionary<TKey, TValue> : IDictionary<TKey,TValue>
+        {
+#if SINGLE_THREADED
+            private readonly ThreadSafeDictionaryValueFactory<TKey,TValue> _valueFactory;
+            private Dictionary<TKey,TValue> _dictionary;
+#else
+            private readonly object _lock = new object();
+            private readonly ThreadSafeDictionaryValueFactory<TKey,TValue> _valueFactory;
+            private Dictionary<TKey,TValue> _dictionary;
+#endif
+
+            public ThreadSafeDictionary(ThreadSafeDictionaryValueFactory<TKey,TValue> valueFactory)
             {
-                private readonly object _lock = new object();
-                private readonly ThreadSafeDictionaryValueFactory<TKey, TValue> _valueFactory;
-                private Dictionary<TKey, TValue> _dictionary;
+                _valueFactory = valueFactory;
+            }
 
-                public ThreadSafeDictionary(ThreadSafeDictionaryValueFactory<TKey, TValue> valueFactory)
-                {
-                    _valueFactory = valueFactory;
+            private TValue Get(TKey key)
+            {
+                if (_dictionary == null)
+                    return AddValue(key);
+                TValue value;
+                if (!_dictionary.TryGetValue(key,out value))
+                    return AddValue(key);
+                return value;
+            }
+
+            private TValue AddValue(TKey key)
+            {
+                TValue value = _valueFactory(key);
+#if SINGLE_THREADED
+                if (_dictionary == null) {
+                    _dictionary = new Dictionary<TKey,TValue>();
                 }
-
-                private TValue Get(TKey key)
+                _dictionary[key] = value;
+#else
+                lock (_lock)
                 {
                     if (_dictionary == null)
-                        return AddValue(key);
-                    TValue value;
-                    if (!_dictionary.TryGetValue(key, out value))
-                        return AddValue(key);
-                    return value;
-                }
-
-                private TValue AddValue(TKey key)
-                {
-                    TValue value = _valueFactory(key);
-                    lock (_lock)
                     {
-                        if (_dictionary == null)
-                        {
-                            _dictionary = new Dictionary<TKey, TValue>();
-                            _dictionary[key] = value;
-                        }
-                        else
-                        {
-                            TValue val;
-                            if (_dictionary.TryGetValue(key, out val))
-                                return val;
-                            Dictionary<TKey, TValue> dict = new Dictionary<TKey, TValue>(_dictionary);
-                            dict[key] = value;
-                            _dictionary = dict;
-                        }
+                        _dictionary = new Dictionary<TKey,TValue>();
+                        _dictionary[key] = value;
                     }
-                    return value;
+                    else
+                    {
+                        TValue val;
+                        if (_dictionary.TryGetValue(key,out val))
+                            return val;
+                        Dictionary<TKey,TValue> dict = new Dictionary<TKey,TValue>(_dictionary);
+                        dict[key] = value;
+                        _dictionary = dict;
+                    }
                 }
+#endif
+                return value;
+            }
 
-                public void Add(TKey key, TValue value)
-                {
-                    throw new NotImplementedException();
-                }
+            public void Add(TKey key,TValue value)
+            {
+                throw new NotImplementedException();
+            }
 
-                public bool ContainsKey(TKey key)
-                {
-                    return _dictionary.ContainsKey(key);
-                }
+            public bool ContainsKey(TKey key)
+            {
+                // BUG FIX: _dictionary 在首次 Get 前可能为 null，直接调用会 NullReferenceException
+                return _dictionary != null && _dictionary.ContainsKey(key);
+            }
 
-                public ICollection<TKey> Keys
-                {
-                    get { return _dictionary.Keys; }
-                }
+            public ICollection<TKey> Keys
+            {
+                // BUG FIX: _dictionary 为 null 时返回空集合而非抛出 NullReferenceException
+                get { return _dictionary != null ? _dictionary.Keys : (ICollection<TKey>)new TKey[0]; }
+            }
 
-                public bool Remove(TKey key)
-                {
-                    throw new NotImplementedException();
-                }
+            public bool Remove(TKey key)
+            {
+                throw new NotImplementedException();
+            }
 
-                public bool TryGetValue(TKey key, out TValue value)
-                {
-                    value = this[key];
+            public bool TryGetValue(TKey key,out TValue value)
+            {
+                // BUG FIX: 原实现调用 this[key]（即 Get()），当 key 不存在时会调用 AddValue 创建并缓存新值，
+                // 始终返回 true，破坏了 TryGetValue 的语义，也可能导致意外的缓存污染。
+                // 正确做法：先检查字典中是否存在该 key，不存在则返回 false。
+                if (_dictionary != null && _dictionary.TryGetValue(key,out value))
                     return true;
-                }
+                value = default(TValue);
+                return false;
+            }
 
-                public ICollection<TValue> Values
-                {
-                    get { return _dictionary.Values; }
-                }
+            public ICollection<TValue> Values
+            {
+                // BUG FIX: _dictionary 为 null 时返回空集合
+                get { return _dictionary != null ? _dictionary.Values : (ICollection<TValue>)new TValue[0]; }
+            }
 
-                public TValue this[TKey key]
-                {
-                    get { return Get(key); }
-                    set { throw new NotImplementedException(); }
-                }
+            public TValue this[TKey key]
+            {
+                get { return Get(key); }
+                set { throw new NotImplementedException(); }
+            }
 
-                public void Add(KeyValuePair<TKey, TValue> item)
-                {
-                    throw new NotImplementedException();
-                }
+            public void Add(KeyValuePair<TKey,TValue> item)
+            {
+                throw new NotImplementedException();
+            }
 
-                public void Clear()
-                {
-                    throw new NotImplementedException();
-                }
+            public void Clear()
+            {
+                throw new NotImplementedException();
+            }
 
-                public bool Contains(KeyValuePair<TKey, TValue> item)
-                {
-                    throw new NotImplementedException();
-                }
+            public bool Contains(KeyValuePair<TKey,TValue> item)
+            {
+                throw new NotImplementedException();
+            }
 
-                public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
-                {
-                    throw new NotImplementedException();
-                }
+            public void CopyTo(KeyValuePair<TKey,TValue>[] array,int arrayIndex)
+            {
+                throw new NotImplementedException();
+            }
 
-                public int Count
-                {
-                    get { return _dictionary.Count; }
-                }
+            public int Count
+            {
+                // BUG FIX: _dictionary 为 null 时返回 0
+                get { return _dictionary != null ? _dictionary.Count : 0; }
+            }
 
-                public bool IsReadOnly
-                {
-                    get { throw new NotImplementedException(); }
-                }
+            public bool IsReadOnly
+            {
+                get { throw new NotImplementedException(); }
+            }
 
-                public bool Remove(KeyValuePair<TKey, TValue> item)
-                {
-                    throw new NotImplementedException();
-                }
+            public bool Remove(KeyValuePair<TKey,TValue> item)
+            {
+                throw new NotImplementedException();
+            }
 
-                public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
-                {
-                    return _dictionary.GetEnumerator();
-                }
+            public IEnumerator<KeyValuePair<TKey,TValue>> GetEnumerator()
+            {
+                // BUG FIX: _dictionary 为 null 时返回空枚举器
+                if (_dictionary == null) yield break;
+                foreach (var kv in _dictionary) yield return kv;
+            }
 
-                System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
-                {
-                    return _dictionary.GetEnumerator();
-                }
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            {
+                if (_dictionary == null) yield break;
+                foreach (var kv in _dictionary) yield return kv;
             }
         }
+
     }
+
+    /// <summary>
+    /// JsonIgnore: ignore property
+    /// </summary>
+    [System.AttributeUsage(System.AttributeTargets.Property |
+                       System.AttributeTargets.Field)]
+    public sealed class JsonIgnoreAttribute : Attribute
+    {
+    }
+    /// <summary>
+    /// JsonInclude
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field,Inherited = false,AllowMultiple = false)]
+    public class JsonIncludeAttribute : Attribute
+    {
+    }
+    /// <summary>
+    /// 序列化/反序列化时使用别名映射字段或属性名称。需要Only Public=false才能生效。
+    /// AcceptOriginal=true 时，反序列化同时接受原始名称和别名。
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    public class JsonAliasAttribute : Attribute
+    {
+        public string Alias { get; private set; }
+        public bool AcceptOriginal { get; private set; }
+
+        public JsonAliasAttribute(string aliasName,bool acceptOriginalName = false)
+        {
+            Alias = aliasName;
+            AcceptOriginal = acceptOriginalName;
+        }
+    }
+    /// <summary>
+    /// Json Serializer Extensions
+    /// </summary>
+    public static class JsonSerializerExtensions
+    {
+#if SIMPLE_JSON_UNITY
+        static UnitySerializationStrategy publicLowerCaseStrategy = new UnitySerializationStrategy(true,true);
+        static UnitySerializationStrategy publicUpperCaseStrategy = new UnitySerializationStrategy(false,true);
+        static UnitySerializationStrategy privateLowerCaseStrategy = new UnitySerializationStrategy(true,false);
+        static UnitySerializationStrategy privateUpperCaseStrategy = new UnitySerializationStrategy(false,false);
+#else
+        static DefaultJsonSerializationStrategy publicLowerCaseStrategy = new DefaultJsonSerializationStrategy(true,true);
+        static DefaultJsonSerializationStrategy publicUpperCaseStrategy = new DefaultJsonSerializationStrategy(false,true);
+        static DefaultJsonSerializationStrategy privateLowerCaseStrategy = new DefaultJsonSerializationStrategy(true,false);
+        static DefaultJsonSerializationStrategy privateUpperCaseStrategy = new DefaultJsonSerializationStrategy(false,false);
+#endif
+        public static string ToJson<T>(this T model,bool lowerCase = false,bool onlyPublic = true)
+        {
+            return SimpleJson.SerializeObject(model,GetStrategy(lowerCase,onlyPublic));
+        }
+        public static string ToJson(object model,bool lowerCase = false,bool onlyPublic = true)
+        {
+            return SimpleJson.SerializeObject(model,GetStrategy(lowerCase,onlyPublic));
+        }
+        public static T FromJson<T>(this string json,bool lowerCase = false,bool onlyPublic = true)
+        {
+            return SimpleJson.DeserializeObject<T>(json,GetStrategy(lowerCase,onlyPublic));
+        }
+        public static object FromJson(string data,Type t,bool lowerCase = false,bool onlyPublic = true)
+        {
+            return SimpleJson.DeserializeObject(data,t,GetStrategy(lowerCase,onlyPublic));
+        }
+        public static T FromObject<T>(this object obj,bool lowerCase = false,bool onlyPublic = true)
+        {
+            if (obj == null)
+                return default(T);
+            var ret = GetStrategy(lowerCase,onlyPublic).DeserializeObject(obj,typeof(T));
+            if (ret is T)
+                return (T)ret;
+            return default(T);
+        }
+
+        internal static PocoJsonSerializerStrategy GetStrategy(bool lowerCase,bool onlyPublic)
+        {
+            if (lowerCase && onlyPublic)
+                return publicLowerCaseStrategy;
+            if (lowerCase && !onlyPublic)
+                return privateLowerCaseStrategy;
+            if (!lowerCase && onlyPublic)
+                return publicUpperCaseStrategy;
+            return privateUpperCaseStrategy;
+        }
+
+
+
+    }
+
+
+
+
 }
 // ReSharper restore LoopCanBeConvertedToQuery
 // ReSharper restore RedundantExplicitArrayCreation

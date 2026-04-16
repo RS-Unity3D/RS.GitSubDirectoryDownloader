@@ -60,6 +60,6 @@ namespace Octokit
         /// </summary>
         public int Seats { get; private set; }
 
-        internal string DebuggerDisplay => new SimpleJsonSerializer().Serialize(this);
+        internal string DebuggerDisplay => new NewtonsoftJsonSerializer().Serialize(this);
     }
 }

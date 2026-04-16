@@ -1,17 +1,16 @@
-﻿using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
+using System;
+using System.Diagnostics;
+using Newtonsoft.Json;
+using Octokit.Internal;
 
 namespace Octokit
 {
-    /// <summary>
-    /// Information about a file in a repository. It does not include the contents of the file.
-    /// </summary>
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
     public class RepositoryContentInfo
     {
         public RepositoryContentInfo() { }
 
+        [JsonConstructor]
         public RepositoryContentInfo(string name, string path, string sha, int size, ContentType type, string downloadUrl, string url, string gitUrl, string htmlUrl)
         {
             Name = name;
@@ -25,58 +24,33 @@ namespace Octokit
             HtmlUrl = htmlUrl;
         }
 
-        /// <summary>
-        /// Name of the content.
-        /// </summary>
+        [JsonProperty("name")]
         public string Name { get; protected set; }
 
-        /// <summary>
-        /// Path to this content.
-        /// </summary>
+        [JsonProperty("path")]
         public string Path { get; protected set; }
 
-        /// <summary>
-        /// SHA of this content.
-        /// </summary>
+        [JsonProperty("sha")]
         public string Sha { get; protected set; }
 
-        /// <summary>
-        /// Size of the content.
-        /// </summary>
+        [JsonProperty("size")]
         public int Size { get; protected set; }
 
-        /// <summary>
-        /// The type of this content. It might be a File, Directory, Submodule, or Symlink
-        /// </summary>
-        [SuppressMessage("Microsoft.Naming", "CA1721:PropertyNamesShouldNotMatchGetMethods", Justification = "Matches the property name used by the API")]
+        [JsonProperty("type")]
         public StringEnum<ContentType> Type { get; protected set; }
 
-        /// <summary>
-        /// URL to the raw content
-        /// </summary>
+        [JsonProperty("download_url")]
         public string DownloadUrl { get; protected set; }
 
-        /// <summary>
-        /// URL to this content
-        /// </summary>
+        [JsonProperty("url")]
         public string Url { get; protected set; }
 
-        /// <summary>
-        /// The GIT URL to this content.
-        /// </summary>
+        [JsonProperty("git_url")]
         public string GitUrl { get; protected set; }
 
-        /// <summary>
-        /// The URL to view this content on GitHub.
-        /// </summary>
+        [JsonProperty("html_url")]
         public string HtmlUrl { get; protected set; }
 
-        internal string DebuggerDisplay
-        {
-            get
-            {
-                return string.Format(CultureInfo.InvariantCulture, "Name: {0} Path: {1} Type:{2}", Name, Path, Type);
-            }
-        }
+        internal string DebuggerDisplay => $"Name: {Name} Path: {Path} Type:{Type}";
     }
 }

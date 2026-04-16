@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -51,7 +51,7 @@ namespace Octokit
             public string GetValue(object instance)
             {
                 var value = _property.GetValue(instance, null);
-                return value != null ? new SimpleJsonSerializer().Serialize(value) : null;
+                return value != null ? new NewtonsoftJsonSerializer().Serialize(value) : null;
             }
 
             [SuppressMessage("Microsoft.Globalization", "CA1308:NormalizeStringsToUppercase",

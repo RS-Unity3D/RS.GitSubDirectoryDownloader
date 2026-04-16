@@ -1,4 +1,4 @@
-﻿using Octokit.Internal;
+using Octokit.Internal;
 using Octokit.Models.Response;
 using System;
 using System.Diagnostics;
@@ -136,6 +136,6 @@ namespace Octokit
 
         public SecurityAndAnalysisRequest SecurityAndAnalysis { get; set; }
 
-        internal string DebuggerDisplay => new SimpleJsonSerializer().Serialize(this);
+        internal string DebuggerDisplay => new NewtonsoftJsonSerializer().Serialize(this);
     }
 }

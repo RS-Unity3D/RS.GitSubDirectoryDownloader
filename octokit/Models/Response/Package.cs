@@ -1,4 +1,4 @@
-﻿using Octokit.Internal;
+using Octokit.Internal;
 using System;
 using System.Diagnostics;
 
@@ -73,6 +73,6 @@ namespace Octokit
         /// </summary>
         public string HtmlUrl { get; private set; }
 
-        internal string DebuggerDisplay => new SimpleJsonSerializer().Serialize(this);
+        internal string DebuggerDisplay => new NewtonsoftJsonSerializer().Serialize(this);
     }
 }

@@ -1,4 +1,4 @@
-Ôªøusing System;
+using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -112,7 +112,7 @@ namespace Octokit
 
         /// <summary>
         /// The issue was closed by the actor. When the commit_id is present, it identifies the commit that
-        /// closed the issue using ‚Äúcloses / fixes #NN‚Äù syntax.
+        /// closed the issue using °∞closes / fixes #NN°± syntax.
         /// </summary>
         [Parameter(Value = "closed")]
         Closed,
@@ -183,19 +183,19 @@ namespace Octokit
         Disconnected,
 
         /// <summary>
-        /// The pull request‚Äôs branch was deleted.
+        /// The pull request°Øs branch was deleted.
         /// </summary>
         [Parameter(Value = "head_ref_deleted")]
         HeadRefDeleted,
 
         /// <summary>
-        /// The pull request‚Äôs branch was restored.
+        /// The pull request°Øs branch was restored.
         /// </summary>
         [Parameter(Value = "head_ref_restored")]
         HeadRefRestored,
 
         /// <summary>
-        /// The pull request‚Äôs branch was force pushed to.
+        /// The pull request°Øs branch was force pushed to.
         /// </summary>
         [Parameter(Value = "head_ref_force_pushed")]
         HeadRefForcePushed,

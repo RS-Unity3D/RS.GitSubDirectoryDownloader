@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.IO;
 using System.Net.Http;
@@ -13,7 +13,7 @@ namespace Octokit.Internal
     {
         readonly IJsonSerializer _serializer;
 
-        public JsonHttpPipeline() : this(new SimpleJsonSerializer())
+        public JsonHttpPipeline() : this(new NewtonsoftJsonSerializer())
         {
         }
 

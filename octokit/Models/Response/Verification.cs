@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Globalization;
 using Octokit.Internal;
 
@@ -13,6 +13,14 @@ namespace Octokit
         public Verification() { }
 
         public Verification(bool verified, VerificationReason reason, string signature, string payload)
+        {
+            Verified = verified;
+            Reason = reason;
+            Signature = signature;
+            Payload = payload;
+        }
+
+        public Verification(bool verified, StringEnum<VerificationReason> reason, string signature, string payload)
         {
             Verified = verified;
             Reason = reason;

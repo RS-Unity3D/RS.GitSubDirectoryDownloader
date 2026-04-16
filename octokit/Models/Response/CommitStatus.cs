@@ -1,4 +1,4 @@
-ï»¿using System;
+using System;
 using System.Diagnostics;
 using System.Globalization;
 using Octokit.Internal;
@@ -41,7 +41,7 @@ namespace Octokit
 
         /// <summary>
         /// URL associated with this status. GitHub.com displays this URL as a link to allow users to easily see the
-        /// â€˜sourceâ€™ of the Status.
+        /// ¡®source¡¯ of the Status.
         /// </summary>
         public string TargetUrl { get; private set; }
 

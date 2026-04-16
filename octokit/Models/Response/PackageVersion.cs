@@ -1,4 +1,4 @@
-﻿using Octokit.Internal;
+using Octokit.Internal;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -38,7 +38,7 @@ namespace Octokit
 
         public PackageVersionMetadata Metadata { get; private set; }
 
-        internal string DebuggerDisplay => new SimpleJsonSerializer().Serialize(this);
+        internal string DebuggerDisplay => new NewtonsoftJsonSerializer().Serialize(this);
     }
 
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -56,7 +56,7 @@ namespace Octokit
 
         public PackageVersionMetadataContainer Container { get; private set; }
 
-        internal string DebuggerDisplay => new SimpleJsonSerializer().Serialize(this);
+        internal string DebuggerDisplay => new NewtonsoftJsonSerializer().Serialize(this);
     }
 
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -71,6 +71,6 @@ namespace Octokit
 
         public IReadOnlyList<string> Tags { get; private set; }
 
-        internal string DebuggerDisplay => new SimpleJsonSerializer().Serialize(this);
+        internal string DebuggerDisplay => new NewtonsoftJsonSerializer().Serialize(this);
     }
 }

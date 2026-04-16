@@ -1,4 +1,7 @@
-﻿using System.Threading.Tasks;
+using System;
+using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
+using System.Threading.Tasks;
 
 namespace Octokit
 {
@@ -60,65 +63,66 @@ namespace Octokit
         }
 
         /// <summary>
-        /// Dependency snapshots dictionaries such as Manifests need to be passed as JsonObject in order to be serialized correctly
+        /// Dependency snapshots dictionaries such as Manifests need to be passed as JObject in order to be serialized correctly
         /// </summary>
-        private JsonObject ConvertToJsonObject(NewDependencySnapshot snapshot)
+        private JObject ConvertToJsonObject(NewDependencySnapshot snapshot)
         {
-            var newSnapshotAsObject = new JsonObject();
-            newSnapshotAsObject.Add("version", snapshot.Version);
-            newSnapshotAsObject.Add("sha", snapshot.Sha);
-            newSnapshotAsObject.Add("ref", snapshot.Ref);
-            newSnapshotAsObject.Add("scanned", snapshot.Scanned);
-            newSnapshotAsObject.Add("job", snapshot.Job);
-            newSnapshotAsObject.Add("detector", snapshot.Detector);
+            var newSnapshotAsObject = new JObject();
+            newSnapshotAsObject["version"] = snapshot.Version;
+            newSnapshotAsObject["sha"] = snapshot.Sha;
+            newSnapshotAsObject["ref"] = snapshot.Ref;
+            newSnapshotAsObject["scanned"] = snapshot.Scanned;
+            newSnapshotAsObject["job"] = JToken.FromObject(snapshot.Job);
+            newSnapshotAsObject["detector"] = JToken.FromObject(snapshot.Detector);
 
             if (snapshot.Metadata != null)
             {
-                var metadataAsObject = new JsonObject();
+                var metadataAsObject = new JObject();
                 foreach (var kvp in snapshot.Metadata)
                 {
-                    metadataAsObject.Add(kvp.Key, kvp.Value);
+                    metadataAsObject[kvp.Key] = JToken.FromObject(kvp.Value);
                 }
 
-                newSnapshotAsObject.Add("metadata", metadataAsObject);
+                newSnapshotAsObject["metadata"] = metadataAsObject;
             }
 
             if (snapshot.Manifests != null)
             {
-                var manifestsAsObject = new JsonObject();
+                var manifestsAsObject = new JObject();
                 foreach (var manifestKvp in snapshot.Manifests)
                 {
                     var manifest = manifestKvp.Value;
 
-                    var manifestAsObject = new JsonObject();
-                    manifestAsObject.Add("name", manifest.Name);
+                    var manifestAsObject = new JObject();
+                    manifestAsObject["name"] = manifest.Name;
 
                     if (manifest.File.SourceLocation != null)
                     {
-                        var manifestFileAsObject = new { SourceLocation = manifest.File.SourceLocation };
-                        manifestAsObject.Add("file", manifestFileAsObject);
+                        var manifestFileAsObject = new JObject();
+                        manifestFileAsObject["source_location"] = manifest.File.SourceLocation;
+                        manifestAsObject["file"] = manifestFileAsObject;
                     }
 
                     if (manifest.Metadata != null)
                     {
-                        manifestAsObject.Add("metadata", manifest.Metadata);
+                        manifestAsObject["metadata"] = JToken.FromObject(manifest.Metadata);
                     }
 
                     if (manifest.Resolved != null)
                     {
-                        var resolvedAsObject = new JsonObject();
+                        var resolvedAsObject = new JObject();
                         foreach (var resolvedKvp in manifest.Resolved)
                         {
-                            resolvedAsObject.Add(resolvedKvp.Key, resolvedKvp.Value);
+                            resolvedAsObject[resolvedKvp.Key] = JToken.FromObject(resolvedKvp.Value);
                         }
 
-                        manifestAsObject.Add("resolved", resolvedAsObject);
+                        manifestAsObject["resolved"] = resolvedAsObject;
                     }
 
-                    manifestsAsObject.Add(manifestKvp.Key, manifestAsObject);
+                    manifestsAsObject[manifestKvp.Key] = manifestAsObject;
                 }
 
-                newSnapshotAsObject.Add("manifests", manifestsAsObject);
+                newSnapshotAsObject["manifests"] = manifestsAsObject;
             }
 
             return newSnapshotAsObject;

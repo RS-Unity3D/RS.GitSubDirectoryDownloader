@@ -1,4 +1,4 @@
-﻿using Octokit.Internal;
+using Octokit.Internal;
 
 namespace Octokit
 {

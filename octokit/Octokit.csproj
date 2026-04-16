@@ -17,6 +17,7 @@
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageTags>GitHub API Octokit linqpad-samples dotnetcore</PackageTags>
 		<Copyright>Copyright GitHub 2017</Copyright>
+		<LangVersion>latest</LangVersion>
 	</PropertyGroup>
 
 	<PropertyGroup>
@@ -35,11 +36,22 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <None Remove="SimpleJson.cs" />
+	  <None Remove="SimpleJson.cs.bak" />
+	  <Compile Remove="SimpleJson.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<TrimmerRootDescriptor Include="rd.xml" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<None Include="images\octokit.png" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 	</ItemGroup>
 
 	<ItemGroup Label="InternalsVisibleTo attributes">

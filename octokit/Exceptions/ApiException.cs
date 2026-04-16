@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Runtime.Serialization;
@@ -16,7 +16,7 @@ namespace Octokit
     public class ApiException : Exception
     {
         // This needs to be hard-coded for translating GitHub error messages.
-        static readonly IJsonSerializer _jsonSerializer = new SimpleJsonSerializer();
+        static readonly IJsonSerializer _jsonSerializer = new NewtonsoftJsonSerializer();
 
         /// <summary>
         /// Constructs an instance of ApiException

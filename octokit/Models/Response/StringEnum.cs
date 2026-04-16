@@ -22,8 +22,8 @@ namespace Octokit
                 throw GetArgumentException(parsedValue.ToString());
             }
 
-            // Use the SimpleJsonSerializer to serialize the TEnum into the correct string according to the GitHub Api strategy
-            _stringValue = SimpleJsonSerializer.SerializeEnum(parsedValue as Enum);
+            // Use the NewtonsoftJsonSerializer to serialize the TEnum into the correct string according to the GitHub Api strategy
+            _stringValue = NewtonsoftJsonSerializer.SerializeEnum(parsedValue as Enum);
             _parsedValue = parsedValue;
         }
 
@@ -70,8 +70,8 @@ namespace Octokit
 
             try
             {
-                // Use the SimpleJsonSerializer to parse the string to Enum according to the GitHub Api strategy
-                value = (TEnum)SimpleJsonSerializer.DeserializeEnum(StringValue, typeof(TEnum));
+                // Use the NewtonsoftJsonSerializer to parse the string to Enum according to the GitHub Api strategy
+                value = (TEnum)NewtonsoftJsonSerializer.DeserializeEnum(StringValue, typeof(TEnum));
 
                 // cache the parsed value for subsequent calls.
                 _parsedValue = value;

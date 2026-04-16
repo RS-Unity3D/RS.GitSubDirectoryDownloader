@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Directives>
+  <Application>
+    <Assembly Name="Newtonsoft.Json" Dynamic="Required All" />
+    
+    <Assembly Name="Octokit" Dynamic="Required All">
+      <Type Name="Octokit.RepositoryContent" Dynamic="Required All" />
+      <Type Name="Octokit.RepositoryContentInfo" Dynamic="Required All" />
+      <Type Name="Octokit.ContentType" Dynamic="Required All" />
+      <Type Name="Octokit.Internal.StringEnum`1[[Octokit.ContentType, Octokit]]" Dynamic="Required All" />
+    </Assembly>
+    
+    <Assembly Name="System.Private.CoreLib">
+      <Type Name="System.Collections.Generic.Dictionary`2" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.List`1" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.List`1[[Octokit.RepositoryContent, Octokit]]" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.List`1[[Octokit.RepositoryContentInfo, Octokit]]" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.IReadOnlyDictionary`2" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.IReadOnlyList`1" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.KeyValuePair`2" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.IEnumerable`1" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.IList`1" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.IDictionary`2" Dynamic="Required All" />
+      <Type Name="System.String" Dynamic="Required All" />
+      <Type Name="System.Int32" Dynamic="Required All" />
+      <Type Name="System.Int64" Dynamic="Required All" />
+      <Type Name="System.Double" Dynamic="Required All" />
+      <Type Name="System.Boolean" Dynamic="Required All" />
+      <Type Name="System.DateTime" Dynamic="Required All" />
+      <Type Name="System.DateTimeOffset" Dynamic="Required All" />
+      <Type Name="System.Guid" Dynamic="Required All" />
+      <Type Name="System.Uri" Dynamic="Required All" />
+      <Type Name="System.Object" Dynamic="Required All" />
+      <Type Name="System.Type" Dynamic="Required All" />
+      <Type Name="System.Reflection.MemberInfo" Dynamic="Required All" />
+      <Type Name="System.Reflection.PropertyInfo" Dynamic="Required All" />
+      <Type Name="System.Reflection.FieldInfo" Dynamic="Required All" />
+      <Type Name="System.Reflection.MethodInfo" Dynamic="Required All" />
+      <Type Name="System.Reflection.ConstructorInfo" Dynamic="Required All" />
+      <Type Name="System.Reflection.ParameterInfo" Dynamic="Required All" />
+    </Assembly>
+    
+    <Assembly Name="System.Collections">
+      <Type Name="System.Collections.Generic.Dictionary`2" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.List`1" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.List`1[[Octokit.RepositoryContent, Octokit]]" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.List`1[[Octokit.RepositoryContentInfo, Octokit]]" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.IReadOnlyDictionary`2" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.IReadOnlyList`1" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.KeyValuePair`2" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.IEnumerable`1" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.IList`1" Dynamic="Required All" />
+      <Type Name="System.Collections.Generic.IDictionary`2" Dynamic="Required All" />
+    </Assembly>
+    
+    <Assembly Name="System.Runtime">
+      <Type Name="System.Type" Dynamic="Required All" />
+      <Type Name="System.Reflection.MemberInfo" Dynamic="Required All" />
+      <Type Name="System.Reflection.PropertyInfo" Dynamic="Required All" />
+      <Type Name="System.Reflection.FieldInfo" Dynamic="Required All" />
+      <Type Name="System.Reflection.MethodInfo" Dynamic="Required All" />
+      <Type Name="System.Reflection.ConstructorInfo" Dynamic="Required All" />
+      <Type Name="System.Reflection.ParameterInfo" Dynamic="Required All" />
+    </Assembly>
+  </Application>
+</Directives>

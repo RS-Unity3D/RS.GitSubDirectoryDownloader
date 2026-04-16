@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -56,7 +56,7 @@ namespace Octokit
         /// The client to use for executing requests
         /// </param>
         public Connection(ProductHeaderValue productInformation, IHttpClient httpClient)
-            : this(productInformation, _defaultGitHubApiUrl, _anonymousCredentials, httpClient, new SimpleJsonSerializer())
+            : this(productInformation, _defaultGitHubApiUrl, _anonymousCredentials, httpClient, new NewtonsoftJsonSerializer())
         {
         }
 
@@ -110,7 +110,7 @@ namespace Octokit
         /// <param name="credentialStore">Provides credentials to the client when making requests</param>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope")]
         public Connection(ProductHeaderValue productInformation, Uri baseAddress, ICredentialStore credentialStore)
-            : this(productInformation, baseAddress, credentialStore, new HttpClientAdapter(HttpMessageHandlerFactory.CreateDefault), new SimpleJsonSerializer())
+            : this(productInformation, baseAddress, credentialStore, new HttpClientAdapter(HttpMessageHandlerFactory.CreateDefault), new NewtonsoftJsonSerializer())
         {
         }
 

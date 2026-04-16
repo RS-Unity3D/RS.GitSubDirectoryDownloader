@@ -1,4 +1,4 @@
-﻿using Octokit.Internal;
+using Octokit.Internal;
 using System.Diagnostics;
 
 
@@ -36,7 +36,7 @@ namespace Octokit
         {
             get
             {
-                return new SimpleJsonSerializer().Serialize(this);
+                return new NewtonsoftJsonSerializer().Serialize(this);
             }
         }
     }
@@ -65,7 +65,7 @@ namespace Octokit
         {
             get
             {
-                return new SimpleJsonSerializer().Serialize(this);
+                return new NewtonsoftJsonSerializer().Serialize(this);
             }
         }
     }
@@ -93,7 +93,7 @@ namespace Octokit
         {
             get
             {
-                return new SimpleJsonSerializer().Serialize(this);
+                return new NewtonsoftJsonSerializer().Serialize(this);
             }
         }
     }
@@ -121,7 +121,7 @@ namespace Octokit
         {
             get
             {
-                return new SimpleJsonSerializer().Serialize(this);
+                return new NewtonsoftJsonSerializer().Serialize(this);
             }
         }
     }
@@ -149,7 +149,7 @@ namespace Octokit
         {
             get
             {
-                return new SimpleJsonSerializer().Serialize(this);
+                return new NewtonsoftJsonSerializer().Serialize(this);
             }
         }
     }
@@ -177,7 +177,7 @@ namespace Octokit
         {
             get
             {
-                return new SimpleJsonSerializer().Serialize(this);
+                return new NewtonsoftJsonSerializer().Serialize(this);
             }
         }
     }

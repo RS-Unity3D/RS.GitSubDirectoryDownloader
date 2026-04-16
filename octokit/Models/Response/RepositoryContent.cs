@@ -1,17 +1,15 @@
 using System.Diagnostics;
+using Newtonsoft.Json;
 using Octokit.Internal;
 
 namespace Octokit
 {
-    /// <summary>
-    /// Represents a piece of content in the repository. This could be a submodule, a symlink, a directory, or a file.
-    /// Look at the Type property to figure out which one it is.
-    /// </summary>
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
     public class RepositoryContent : RepositoryContentInfo
     {
         public RepositoryContent() { }
 
+        [JsonConstructor]
         public RepositoryContent(string name, string path, string sha, int size, ContentType type, string downloadUrl, string url, string gitUrl, string htmlUrl, string encoding, string encodedContent, string target, string submoduleGitUrl)
             : base(name, path, sha, size, type, downloadUrl, url, gitUrl, htmlUrl)
         {
@@ -21,20 +19,13 @@ namespace Octokit
             SubmoduleGitUrl = submoduleGitUrl;
         }
 
-        /// <summary>
-        /// The encoding of the content if this is a file. Typically "base64". Otherwise it's null.
-        /// </summary>
+        [JsonProperty("encoding")]
         public string Encoding { get; private set; }
 
-        /// <summary>
-        /// The Base64 encoded content if this is a file. Otherwise it's null.
-        /// </summary>
-        [Parameter(Key = "content")]
+        [JsonProperty("content")]
         public string EncodedContent { get; private set; }
 
-        /// <summary>
-        /// The unencoded content. Only access this if the content is expected to be text and not binary content.
-        /// </summary>
+        [JsonIgnore]
         public string Content
         {
             get
@@ -45,14 +36,10 @@ namespace Octokit
             }
         }
 
-        /// <summary>
-        /// Path to the target file in the repository if this is a symlink. Otherwise it's null.
-        /// </summary>
+        [JsonProperty("target")]
         public string Target { get; private set; }
 
-        /// <summary>
-        /// The location of the submodule repository if this is a submodule. Otherwise it's null.
-        /// </summary>
+        [JsonProperty("submodule_git_url")]
         public string SubmoduleGitUrl { get; private set; }
     }
 }
