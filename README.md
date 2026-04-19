@@ -15,14 +15,13 @@
 ### 🌐 网络功能
 
 - **代理支持**：支持系统代理、HTTP/HTTPS 代理、SOCKS5 代理
-- **GH-Proxy 加速**：内置 GH-Proxy 加速服务，支持自动选择最快节点
+- **GitHub-Proxy 加速**：内置 GitHub-Proxy 加速服务，支持自动选择最快节点
 - **GitHub Token 认证**：支持使用 GitHub Personal Access Token 提高 API 限制
 
 ### 🛠️ 编译与保护
 
 - **AOT 编译**：支持 Native AOT 编译，生成原生可执行文件
-- **R2R 编译**：支持 ReadyToRun 预编译，提高启动速度
-- **代码保护**：多种代码保护方案，包括裁剪、混淆等
+
 
 ### 🖥️ 用户界面
 
@@ -33,7 +32,7 @@
 
 ### 窗口模式
 
-直接运行 `RS.GitSubDirectoryDownloader.NET8.exe` 或 `RS.GitSubDirectoryDownloader.exe`（AOT 版本）即可打开窗口界面。
+直接运行 `RS.GitSubDirectoryDownloader.exe`即可打开窗口界面。
 
 ### 命令行模式
 
@@ -65,22 +64,11 @@ RS.GitSubDirectoryDownloader.Console.exe --help
 
 ```bash
 # 窗口模式
-dotnet build RS.GitSubDirectoryDownloader.NET8.csproj -c Release
+dotnet build RS.GitSubDirectoryDownloader.csproj -c Release
 
 # 命令行模式
 dotnet build RS.GitSubDirectoryDownloader.Console.csproj -c Release
 ```
-
-### AOT 编译
-
-```bash
-# 窗口模式（AOT）
-dotnet publish RS.GitSubDirectoryDownloader.csproj -c Release -r win-x64
-
-# 命令行模式（AOT）
-dotnet publish RS.GitSubDirectoryDownloader.Console.csproj -c Release -r win-x64
-```
-
 
 
 
