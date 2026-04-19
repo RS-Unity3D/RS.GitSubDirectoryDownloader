@@ -59,7 +59,7 @@
 1. Octokit（推荐）
    - 使用GitHub官方Octokit库
    - 功能完整，稳定性好
-   - 支持GH-Proxy加速
+   - 支持GitHub-Proxy加速
    - 适合下载单个目录
 
 2. LibGit2Sharp（完整克隆）
@@ -69,28 +69,17 @@
 
 
 --------------------------------------------------------------------------------
-【加速服务说明（GH-Proxy）】
+【加速服务说明（GitHub-Proxy）】
 --------------------------------------------------------------------------------
-GH-Proxy是GitHub文件下载加速服务，来自 https://gh-proxy.com/
+
 
 使用步骤：
-1. 选择加速模式：不使用加速 / GH-Proxy加速
+1. 选择加速模式：不使用加速 / GitHub-Proxy加速
 2. 选择加速节点（启用加速时）
-3. 查看或修改加速后URL
 
-节点选择：
-- cloudflare (主站) - 默认节点
-- cloudflare-v6 (IPv6) - 支持IPv6
-- hongkong (香港) - 国内推荐
-- fastly (Fastly CDN)
-- edgeone (全球加速)
 
-加速后URL：
-- 启用加速后，系统会自动生成加速后的完整URL
-- 该URL可手动修改，支持使用自定义加速服务
-- 示例：https://hk.gh-proxy.org/https://github.com/user/repo
 
-注意：GH-Proxy是加速服务，不是代理！它通过URL重定向实现加速。
+
 
 --------------------------------------------------------------------------------
 【代理设置说明（传统代理）】
@@ -191,12 +180,7 @@ RS.GitSubDirectoryDownloader -u https://github.com/user/repo -t ghp_xxxxx
 # 完整参数示例
 RS.GitSubDirectoryDownloader -u https://github.com/user/repo/tree/main/src -o ./output -a ghproxy:hongkong -e .cs -t ghp_xxxxx
 
-================================================================================
-【日志文件】
-================================================================================
-所有下载日志会同时保存到 download.log 文件中，便于查看历史记录。
 
-日志文件位置：程序所在目录/download.log
 
 ================================================================================
 【常见问题】
